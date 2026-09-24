@@ -10,12 +10,12 @@
 
 Ese encuadre resuelve las dos alternativas que se descartaron. **Meter el cualitativo adentro de `paneles`** convertiría a `paneles` en otra cosa: un sistema que hace todo deja de tener invariantes que valga la pena defender. **Consultar por API** acoplaría la disponibilidad de COLOQUIO a la de `paneles`, que es peor que acoplar el esquema —el esquema se versiona, la caída se sufre—.
 
-Lo que sí hereda esa decisión es un trabajo que hasta ahora no se notaba porque había un solo consumidor: las invariantes de la bóveda (gate de consentimiento, cascada de baja, prohibición de PII del lado semántico) viven hoy en el código de `panel_api`, y un `if` en Python no es un contrato cuando hay dos sistemas que lo tienen que cumplir. Eso, más la reformulación del modelo de consentimiento para cubrir lo que el cualitativo exige bajo URCDP, es la Fase 0. No es "tocar el sistema viejo": es elevar la bóveda a plataforma.
+Lo que sí hereda esa decisión es un trabajo que hasta ahora no se notaba porque había un solo consumidor: las invariantes de la bóveda (gate de consentimiento, cascada de baja, prohibición de PII del lado semántico) viven hoy en el código de `panel_api`, y un `if` en Python no es un contrato cuando hay dos sistemas que lo tienen que cumplir. Eso, más la reformulación del modelo de consentimiento para cubrir lo que el cualitativo exige bajo URCDP, es la **Fase 5 de `paneles`**: el incumbente externaliza sus bóvedas antes de entregarlas. No es un prólogo de COLOQUIO, es una fase del otro sistema, con su propia spec y su propio criterio de salida.
 
 **Dos principios de diseño que gobiernan todo el documento.**
 
 1. **Hay dos inteligencias artificiales en COLOQUIO y son independientes.** La de **recuperación** —bóveda semántica, selección de a quién convocar— es núcleo del producto y va en la Fase 1. La de **conducción** —moderación automatizada sobre la capa de voz— es una apuesta separada, en fases posteriores. No se confunden ni se condicionan.
-2. **COLOQUIO es un producto completo sin moderación automatizada.** Las Fases 0 a 3 entregan un sistema vendible y operativo con moderador humano en todas las sesiones. Las Fases 4 y 5 agregan escala; si no se construyeran nunca, el proceso de COLOQUIO sigue siendo válido de punta a punta.
+2. **COLOQUIO es un producto completo sin moderación automatizada.** Las Fases 1 a 3 entregan un sistema vendible y operativo con moderador humano en todas las sesiones. Las Fases 4 y 5 agregan escala; si no se construyeran nunca, el proceso de COLOQUIO sigue siendo válido de punta a punta.
 
 **Qué es de COLOQUIO y qué no.** COLOQUIO **lee** de las bóvedas: quiénes son las personas, por criterio demográfico y semántico, y si se las puede contactar. Todo lo demás —pauta, sesiones, convocatoria, **su propio registro de participaciones**, incentivos, grabaciones, transcripciones y segmentos— vive en las bases de COLOQUIO. El registro de participación cualitativa no se escribe en la bóveda: es del cualitativo, y COLOQUIO lo administra.
 
@@ -86,72 +86,7 @@ La separación importa porque el plano de control puede caerse sin cortar una se
 
 Cada fase se especifica con: objetivo, alcance, historias, requisitos con criterios de aceptación, dependencias, criterios de salida (DoD), métricas y riesgos.
 
-**Sobre el orden.** El embudo de convocatoria va primero porque es la condición de posibilidad de todo lo demás: no se pueden hacer doscientas entrevistas si la convocatoria es una persona mandando mensajes. El corpus semántico (Fase 3) va **antes** que la moderación automatizada porque entrega valor con el volumen actual y no depende de que la IA sepa moderar. Las Fases 4 y 5 son las que rompen el techo de escala, y son las que cargan el supuesto más riesgoso del proyecto.
-
----
-
-### Fase 0 — La bóveda como plataforma: consentimiento y endurecimiento
-
-**Se implementa en el repo `paneles`, porque ahí viven hoy las migraciones de la bóveda, pero el trabajo no es de `paneles`: es de la plataforma.** Es lo que faltaba hacer mientras hubo un solo consumidor y no se notaba.
-
-**Objetivo.** Dos cosas. **Reformular el modelo de consentimiento** para que cubra lo que el cualitativo exige bajo URCDP —grabar, conducir automáticamente, indexar el verbatim y difundirlo—, que hoy el dominio de finalidades no admite. Y **mover a la base las reglas que hoy garantiza la aplicación**, de modo que un segundo sistema no las pueda violar aunque quiera.
-
-**Alcance — dentro**
-- **Reformulación del modelo de consentimiento**: extensión del dominio de finalidades para cubrir grabación audiovisual, conducción automatizada, uso semántico cualitativo y difusión de verbatim, con sus textos versionados.
-- Vistas de consumo en la bóveda que ya aplican el gate de consentimiento y el umbral de fatiga.
-- Cascada de baja como mecanismo de base o como evento, no como función de aplicación.
-- Roles de Postgres con privilegio mínimo por sistema.
-- El chequeo de columnas PII del lado semántico como constraint, no como auditoría a demanda.
-- Registro de qué sistema escribió qué, en la auditoría existente.
-
-**Alcance — fuera:** refactor del `panel_api` existente más allá de lo que exija mantener sus pruebas verdes.
-
-**Historias de usuario**
-- Como DPO, quiero que la baja de una persona arrastre sus grabaciones y transcripciones aunque las haya creado otro sistema, para que el derecho de supresión se cumpla de verdad.
-- Como responsable de la plataforma, quiero que un sistema nuevo no pueda escribir sobre `persona` ni leer PII que no necesita, para que el acceso directo no sea un agujero.
-
-**Requisitos y criterios de aceptación**
-
-R0.1 — Vista `persona_convocable`.
-- Dada una finalidad de consentimiento, cuando un sistema consulta `persona_convocable(finalidad)`, entonces solo devuelve personas con consentimiento **vigente** para esa finalidad y por debajo del umbral de fatiga aplicable.
-- Dada una persona sin consentimiento vigente, entonces no aparece en la vista bajo ninguna combinación de parámetros.
-- La vista expone `id_persona` y segmentadores; no expone nombre, documento, email ni celular.
-
-R0.2 — Vista de contacto acotada.
-- Dado un `id_persona` que ya está en una convocatoria activa, cuando se pide su dato de contacto, entonces se devuelve únicamente el canal necesario para esa convocatoria, y el acceso queda auditado.
-- Dado un `id_persona` sin convocatoria activa, entonces la vista no devuelve dato de contacto.
-
-R0.3 — Cascada de baja extensible.
-- Dada la baja de una persona, cuando se ejecuta la cascada, entonces se borran también sus artefactos cualitativos (grabaciones, turnos, segmentos y embeddings derivados), sin que el código de `paneles` tenga que conocer el esquema de COLOQUIO.
-- Dado un artefacto cualitativo huérfano, cuando corre la verificación de integridad, entonces se reporta.
-
-R0.4 — Roles de Postgres por sistema.
-- Existe un rol con permiso de lectura sobre las vistas de bóveda y **sin** permiso de escritura sobre `persona`, `consentimiento` ni `participacion`.
-- Existe un rol con permiso de escritura acotado del lado semántico, solo sobre las entidades de contenido.
-- Un intento de escritura fuera del grant falla en la base, no en la aplicación.
-
-R0.5 — Prohibición de PII semántica como constraint.
-- Dado un intento de crear o poblar una columna con PII del lado semántico, entonces la base lo rechaza. La auditoría de `auditar_columnas()` deja de ser la única defensa.
-
-R0.6 — Auditoría con origen.
-- Dada una escritura en cualquiera de los stores, cuando se audita, entonces queda registrado qué sistema la originó.
-
-R0.7 — Finalidades de consentimiento del cualitativo.
-- Hoy `consentimiento.finalidad` y `texto_consentimiento.finalidad` están restringidas por un `check (finalidad in ('contacto_participacion','uso_semantico'))`. El cualitativo necesita cuatro finalidades nuevas —grabación audiovisual, conducción automatizada, uso semántico cualitativo y difusión de verbatim— y **ninguna se puede registrar sin una migración en `paneles`**.
-- Dada la migración, cuando se extiende el dominio de finalidades, entonces `inscripcion.finalidades` y el flujo de alta siguen funcionando con su default actual y las pruebas existentes no cambian de comportamiento.
-- Los textos de las finalidades nuevas son una definición legal, no técnica: la migración habilita el dominio; los textos se cargan cuando estén.
-
-**Dependencias:** ninguna. Es la primera.
-
-**Criterios de salida (DoD).** Un cliente externo conectado con el rol de COLOQUIO puede seleccionar candidatos y no puede: ver PII fuera de la vista de contacto acotada, escribir sobre `persona`, ni obtener una persona sin consentimiento vigente. La baja de una persona de prueba borra sus artefactos cualitativos. Las cuatro finalidades nuevas se pueden registrar. Las 409 pruebas existentes de `paneles` siguen pasando.
-
-**Métricas de la fase**
-- 0 caminos de acceso a la bóveda desde COLOQUIO que no pasen por una vista.
-- 100% de las bajas de prueba con cascada completa verificada, incluyendo artefactos cuali.
-
-**Riesgos y preguntas de la fase**
-- **[ingeniería]** El gate de consentimiento y la fatiga tienen hoy lógica que puede no ser expresable como vista; puede requerir funciones en la base y eso mueve lógica de negocio fuera del repo. Es un costo real de la decisión de acceso directo.
-- **[ingeniería]** La cascada extensible entre dos bases distintas no es transaccional. Hay que definir si se resuelve con una cola de bajas pendientes y verificación, o con un contrato de borrado que COLOQUIO ejecuta y reporta.
+**Sobre el orden.** Esta numeración empieza en 1: lo que en borradores anteriores era la «Fase 0» pasó a ser la **Fase 5 de `paneles` — Externalización de las bóvedas**, porque el trabajo es sobre el esquema de ese sistema, toca su código y su criterio de salida son sus pruebas. Está especificada en `paneles/specs/SPEC_fase5.md` y es precondición de despliegue de la Fase 1 de acá. El embudo de convocatoria va primero porque es la condición de posibilidad de todo lo demás: no se pueden hacer doscientas entrevistas si la convocatoria es una persona mandando mensajes. El corpus semántico (Fase 3) va **antes** que la moderación automatizada porque entrega valor con el volumen actual y no depende de que la IA sepa moderar. Las Fases 4 y 5 son las que rompen el techo de escala, y son las que cargan el supuesto más riesgoso del proyecto.
 
 ---
 
@@ -227,7 +162,7 @@ R1.9 — Historial de participación por persona.
 - Dado un `id_persona`, cuando el analista abre su historial cualitativo, entonces ve cuántas veces participó, en qué estudios, en qué modalidad y cuándo fue la última vez.
 - El historial es visible en el momento de armar la sesión, no solo como reporte posterior: es lo que permite decidir a quién no volver a llamar.
 
-**Dependencias:** Fase 0 cerrada. Consulta semántica de `paneles` operativa (ya lo está, Fase 2 de ese sistema).
+**Dependencias:** **Fase 5 de `paneles` desplegada** (externalización de las bóvedas: consentimiento reformulado, superficie de lectura, cascada extensible y rol propio). Consulta semántica de `paneles` operativa (ya lo está, Fase 2 de ese sistema).
 
 **Criterios de salida (DoD).** Se puede crear un estudio con pauta, seleccionar candidatos por criterio mixto, convocar con sobre-reclutamiento, reemplazar a un caído restituyendo su segmento, registrar la recepción de ocho personas, y cerrar la sesión con participación registrada e incentivos asignados. El analista ve el historial cualitativo de una persona antes de convocarla. Un focus group presencial se corre entero desde el sistema. Cero acceso a tablas de bóveda fuera de las vistas; cero escrituras de COLOQUIO en la bóveda.
 
@@ -622,12 +557,12 @@ R5.12 — Jerarquía de control.
 - **[producto/datos]** Granularidad del segmento cualitativo para el embedding, y si conviene el mismo espacio vectorial que el cuantitativo o uno separado. Requiere calibración con datos reales, con el mismo protocolo que se usó para la Fase 2 de `paneles`.
 - **[producto]** Definición metodológica del filtro anti-panelista-profesional: ventana temporal y categorización de estudios.
 - **[finanzas/legal]** Tratamiento fiscal del incentivo cualitativo en Uruguay. Es el mismo problema que `paneles` tiene abierto para el canje de premios, con montos bastante mayores. *Bloqueante — liquidación en Fase 1.*
-- **[ingeniería]** La cascada de baja entre bases separadas no es transaccional. Definir el mecanismo y su verificación. *Bloqueante — Fase 0.*
+- **[ingeniería]** La cascada de baja entre bases separadas no es transaccional. Definir el mecanismo y su verificación. *Se resuelve en la Fase 5 de `paneles`.*
 - **[producto]** ¿Cuál es el tamaño máximo de grupo que la moderación automatizada admite? Se responde con la evidencia de la Fase 5, no antes.
 
 ## 5. Dependencia entre sistemas
 
-COLOQUIO **no puede tocar las bóvedas hasta que la Fase 0 esté cerrada**. Las migraciones de esa fase se aplican desde el repo `paneles` porque ahí viven hoy, pero el trabajo es de la plataforma compartida. Es una dependencia dura y va primero en el cronograma, no en paralelo.
+COLOQUIO **no puede tocar las bóvedas hasta que la Fase 5 de `paneles` esté cerrada**: es ahí donde el consentimiento se reformula, donde las invariantes bajan a la base y donde nace el rol con el que COLOQUIO se conecta. Es una dependencia dura y va primero en el cronograma, no en paralelo. Su spec vive en `paneles/specs/SPEC_fase5.md`.
 
 El **motor de consulta semántica** debe estar operativo para las Fases 1 (selección de candidatos) y 3 (corpus cualitativo). COLOQUIO no lo reimplementa: aporta un tipo de contenido nuevo al mismo motor y hereda su calibración.
 
