@@ -160,7 +160,7 @@ Hoy `bajas.py` borra la PII, da de baja las membresías y llama al store semánt
 
 **Roles.** Hoy la aplicación se conecta con un rol que es dueño de las tablas. Se agrega:
 
-- `coloquio_app`: `select` sobre `v_persona_convocable`, `v_fatiga_panelista` y las vistas de catálogo; `execute` sobre `contacto_para_convocatoria` y las funciones de confirmación de borrado; `select`/`update` sobre sus propias filas de `borrado_pendiente`. **Cero privilegio sobre `persona`, `consentimiento`, `participacion`, `membresia` y `encuesta`.**
+- `coloquio_app`: `select` sobre `v_persona_convocable`, `v_fatiga_panelista` y las vistas de catálogo; `execute` sobre `contacto_para_convocatoria` y las funciones de confirmación de borrado; `select`/`update` sobre sus propias filas de `borrado_pendiente`. **Cero privilegio sobre `persona`, `consentimiento`, `participacion`, `membresia` y `encuesta`.** Se crea como **usuario IAM de cuenta de servicio**, por el motivo de §7.2: un usuario tradicional de Cloud SQL nace con `cloudsqlsuperuser` y `CREATEROLE`, y podría otorgarse de vuelta todo lo que le revoquemos.
 - `plataforma_ro`: solo lectura de auditoría y de las vistas de cumplimiento, para el DPO y para los chequeos automáticos.
 
 **Detalle de implementación que hay que hacer bien, porque de él depende que la vista sea realmente la única puerta:** las tablas ya tienen `row level security` **habilitada y sin políticas**, lo que para un rol que no es el dueño significa cero filas. Eso juega a favor. Y una vista en Postgres se ejecuta con los privilegios de **su dueño**, no del que la consulta, salvo que se cree con `security_invoker = true`. Por lo tanto: **las vistas de R0.1 se crean con el dueño actual y sin `security_invoker`**, y a `coloquio_app` no se le otorga nada sobre las tablas base. La vista pasa; la consulta directa no. Si alguien creara las vistas con `security_invoker = true`, devolverían cero filas y el requisito quedaría roto de una forma difícil de diagnosticar: va como comentario en la migración.
@@ -181,16 +181,17 @@ Hoy `bajas.py` borra la PII, da de baja las membresías y llama al store semánt
 
 Un `check` no sirve acá: la regla es sobre **nombres de columna**, no sobre valores. El mecanismo que corresponde es un **event trigger** en `ddl_command_end` que inspeccione `create table`, `alter table … add column` y `alter table … rename column`, y aborte si el nombre cae en la lista de PII, con la excepción ya prevista de `nombre` en `cuestionario` y `pregunta`.
 
-**Hay una incógnita real de plataforma:** Cloud SQL restringe la creación de event triggers a roles con privilegio de superusuario, y hay que confirmar si el rol administrativo disponible los permite (ver §11). Por eso el requisito tiene dos niveles y el primero es el que se entrega sí o sí:
+**Es realizable con lo que ya hay** (ver §7.3): `cloudsqlsuperuser` puede crear event triggers en Cloud SQL, y `app_paneles` es miembro de ese rol. Así que el requisito entrega dos niveles, y los dos son P0 porque protegen cosas distintas:
 
-- **P0 — gate de despliegue.** `scripts/verificar_esquema.py` incorpora el chequeo de PII y sale con código distinto de cero si encuentra una columna prohibida. Se corre en CI sobre el esquema de migraciones **y** contra la base antes de cada deploy. Una columna con nombre de PII del lado semántico impide desplegar.
-- **P1 — event trigger.** Si la plataforma lo permite, el rechazo ocurre en el momento del `alter table`, y el gate de despliegue queda como segunda línea.
+- **Nivel 1 — event trigger.** El `alter table` que agrega una columna con nombre de PII **falla en el momento**, contra la base, lo intente quien lo intente y por el camino que sea.
+- **Nivel 2 — gate de despliegue.** `scripts/verificar_esquema.py` incorpora el chequeo de PII y sale con código distinto de cero si encuentra una columna prohibida. Corre en CI sobre los archivos de migración **y** contra la base antes de cada deploy. No es redundante: el event trigger protege la base, pero no atrapa una migración mal escrita que todavía no se aplicó, y ésa es justamente la que llega a un PR.
 
 Y la lista de PII deja de estar solo en Python: se materializa en la base como tabla de catálogo, de modo que el chequeo del lado semántico y el de la bóveda usen la misma fuente. Hoy `pii.CAMPOS_PII` es un `frozenset` en el repo y el chequeo se hace contra `information_schema` desde la aplicación; el día que COLOQUIO escriba embeddings va a necesitar la misma lista sin importar el módulo de Python.
 
 **Criterios de aceptación**
 
-- Dado un intento de agregar `email` a una tabla del store semántico, entonces el chequeo de esquema falla y el deploy no procede (P0); y si el event trigger está activo, el `alter table` falla en el momento (P1).
+- Dado un intento de agregar `email` a una tabla del store semántico por `alter table`, entonces la base lo rechaza en el momento.
+- Dado un archivo de migración que agrega esa columna, entonces CI falla y el deploy no procede, aunque nadie lo haya aplicado todavía.
 - Dado `nombre` en `cuestionario` o en `pregunta`, entonces no se reporta: sigue siendo la excepción legítima.
 - Dado el store semántico actual tal como está hoy, entonces el chequeo pasa limpio. Si no pasa, hay un hallazgo previo que reportar antes de seguir.
 - La lista de campos PII es una sola y está en la base; `pii.CAMPOS_PII` la lee o la espeja, y existe una prueba que falla si divergen.
@@ -278,7 +279,6 @@ Es el sustituto honesto de "lo revisamos": si el script pasa, la bóveda está l
 
 ### Nice-to-Have (P1)
 
-- **Event trigger de PII** del lado semántico (el nivel 2 de R0.5), sujeto a lo que permita Cloud SQL.
 - **Vista de cumplimiento para el DPO**: una superficie única con bajas abiertas, consentimientos por finalidad, textos activos y accesos a contacto del último período. Hoy eso se arma a mano.
 - **Notificación de baja por evento** (Pub/Sub) además del *polling* sobre `borrado_pendiente`. El *polling* alcanza para el volumen actual y no tiene modos de falla escondidos; el evento reduce la latencia del borrado. Primero el mecanismo confiable, después el rápido.
 - **Métricas de latencia de borrado**: cuánto tarda cada sistema en confirmar, para poder fijar un SLA con dato en vez de con intuición.
@@ -320,7 +320,82 @@ reportar_error_de_borrado(id_persona, error) -> void
 
 **Prohibido y verificado por prueba:** cualquier acceso a `persona`, `consentimiento`, `participacion`, `membresia`, `encuesta`, `puntos_movimiento`, `canje`, `inscripcion`, `alta_en_revision`.
 
-## 7. Migraciones y orden de despliegue
+## 7. Stack y entorno
+
+Esta fase es **enteramente base de datos e infraestructura de acceso**. No toca Cloud Run, ni el SFU, ni la capa de voz, ni nada del plano de medios: eso empieza en la Fase 2 de COLOQUIO. Lo que hay acá son migraciones SQL, roles, y la conectividad que le permite a un segundo servicio llegar a la bóveda.
+
+### 7.1 Lo que ya existe
+
+| Pieza | Valor actual |
+|---|---|
+| Proyecto GCP | `gestion-paneles` |
+| Región | `southamerica-east1` (la PII vive ahí; relevante para URCDP) |
+| Bóveda | Cloud SQL `paneles-boveda` · PostgreSQL 16 · edición Enterprise · **sin IP pública** · base `paneles_boveda` |
+| Semántico | Cloud SQL `paneles-semantica` · PostgreSQL 16 · `pgvector` · **sin IP pública** · base `paneles_semantica` |
+| Red | Conector de Acceso a VPC `paneles-conn`, rango `10.8.0.0/28` |
+| Usuario de base actual | `app_paneles`, en las dos instancias, creado con `gcloud sql users create` |
+| Secretos | `DSN_BOVEDA`, `DSN_SEMANTICA`, `EMBEDDINGS_API_KEY` en Secret Manager |
+| Aplicación | Cloud Functions runtime `python311`, `psycopg`, Firebase Hosting + Auth |
+| Migraciones | Archivos versionados en `db/boveda/` y `db/semantica/`, aplicados con `cloud-sql-proxy` v2 o desde la VM `migrador` |
+| Verificación | `scripts/verificar_esquema.py` compara la base contra las migraciones que el código espera |
+| Pruebas | `scripts/pg_pruebas.sh` levanta un Postgres local con las dos bases en un mismo cluster; `pytest` (409 pruebas) |
+
+**PostgreSQL 16 importa para el diseño.** La opción `security_invoker` de las vistas existe desde PG15 y viene **apagada por defecto**: una vista corre con los privilegios de su dueño. Es exactamente el mecanismo sobre el que se apoya R0.4 para que la vista sea la única puerta, y está disponible. Si las instancias fueran PG14 esta spec necesitaría otro diseño.
+
+### 7.2 La trampa de `cloudsqlsuperuser`
+
+Ésta es la parte del stack que puede convertir todo R0.4 en decoración, y hay que decirla explícitamente en la migración.
+
+En Cloud SQL, **todo usuario creado con `gcloud sql users create`, la consola o la API recibe automáticamente el rol `cloudsqlsuperuser`**, con los atributos `CREATEROLE`, `CREATEDB` y `LOGIN`. Es así como se creó `app_paneles`. Si `coloquio_app` se creara del mismo modo, tendría `CREATEROLE` — es decir, **podría otorgarse a sí mismo cualquier privilegio que le revoquemos**, y la lista blanca de R0.4 no valdría nada.
+
+**Los usuarios de autenticación IAM no reciben ningún rol de base automáticamente.** Por eso:
+
+> **`coloquio_app` se crea como usuario IAM de cuenta de servicio** (`gcloud sql users create … --type=cloud_iam_service_account`), no con un usuario tradicional, y se le otorga exactamente la lista de R0.4 y nada más.
+
+Tres beneficios que se cobran de una sola vez:
+
+1. **Privilegio realmente mínimo**: arranca sin nada, no hay que revocar herencias.
+2. **No hay contraseña**: desaparece el DSN con clave en Secret Manager para el consumidor nuevo. La autenticación es el token de la cuenta de servicio.
+3. **El origen deja de ser declarable.** R0.6 pide que el `sistema` lo fije la conexión y no el llamador. Con IAM, `current_user` **es** el email de la cuenta de servicio: la derivación es directa y no se puede falsificar desde la aplicación.
+
+`app_paneles` no se toca. Migrarlo a IAM sería un cambio de riesgo innecesario en esta fase; queda anotado como candidato futuro.
+
+**Y la red de seguridad que hace que nada de esto dependa de mi memoria de cómo se comporta Cloud SQL:** la prueba de R0.4 enumera los privilegios *efectivos* del rol contra una lista blanca en el repo y falla si sobra uno. Si algún default de la plataforma cambia o si un usuario se crea por el camino equivocado, la build rompe. Esa prueba es el requisito; lo de arriba es cómo se llega.
+
+### 7.3 Event triggers: la pregunta quedó resuelta
+
+`cloudsqlsuperuser` **sí puede crear event triggers** en Cloud SQL for PostgreSQL. Eso cierra la incógnita que R0.5 tenía abierta: el rechazo en el momento del `alter table` es realizable con el rol que ya existe, y R0.5 entrega sus dos niveles. El gate de despliegue queda igual, como segunda línea — un event trigger protege la base pero no protege un archivo de migración mal escrito que todavía no se aplicó.
+
+### 7.4 Conectividad de COLOQUIO: la decisión de infraestructura de la fase
+
+Es el único punto del stack que no tiene respuesta cerrada, y **bloquea a R0.4**: el rol no sirve de nada si el servicio no puede llegar a la instancia.
+
+Las dos instancias **no tienen IP pública** y viven en la VPC del proyecto `gestion-paneles`. El plano de control de COLOQUIO va en un proyecto Firebase propio (PRD). Un servicio en otro proyecto no alcanza una IP privada de otra VPC porque sí. Opciones:
+
+| Opción | Qué implica | Costo |
+|---|---|---|
+| **A · Shared VPC** (recomendada) | COLOQUIO en su proyecto, adjuntado a la VPC de `gestion-paneles` como proyecto de servicio, más `roles/cloudsql.client` cruzado | Configuración de red una vez; conserva la separación de proyectos |
+| **B · VPC peering** | Peering entre las dos VPC | Más piezas, rangos que no se pueden solapar, y el peering no es transitivo |
+| **C · Mismo proyecto** | El plano de control de COLOQUIO vive en `gestion-paneles` | Trivial de conectar, pero diluye la separación de proyectos que el PRD pidió |
+
+Recomendación: **A**. Mantiene la autonomía de deploy que motivó separar los sistemas y no obliga a rediseñar la red. Si el tiempo aprieta, **C** es una regresión aceptable y reversible: la separación de proyectos es una comodidad operativa, no una invariante de la arquitectura — la que importa, y la que esta fase garantiza, es la separación de **privilegios**.
+
+En cualquiera de las tres, la conexión usa el conector de Cloud SQL con autenticación IAM, y la cuenta de servicio de COLOQUIO necesita `roles/cloudsql.client` y `roles/cloudsql.instanceUser` sobre `gestion-paneles`.
+
+### 7.5 Dónde se prueba cada cosa
+
+El cluster local de `pg_pruebas.sh` alcanza para casi todo: vistas, funciones, `grant`, RLS, cascada y catálogo se prueban ahí, contra un Postgres real, igual que las 409 pruebas existentes. Con una salvedad honesta:
+
+- **No se puede probar localmente la autenticación IAM** ni el comportamiento de `cloudsqlsuperuser`, porque son de la plataforma. En el cluster local, `coloquio_app` se crea con SQL plano y sin herencias; la prueba de privilegios efectivos de R0.4 vale igual, porque enumera lo que hay, no cómo se creó.
+- **Lo que sí requiere verificación en un ambiente real** son dos cosas: que el usuario IAM llegue efectivamente a la instancia con la conectividad elegida, y que el event trigger se pueda crear. Las dos se chequean una vez, en la puesta en marcha, y quedan en el manual de despliegue.
+
+Esta fase agrega un **`DESPLIEGUE - COLOQUIO Fase 0.md`** al repo, en la línea de los tres manuales existentes: instancias, rol IAM, conectividad elegida, orden de migraciones, y la verificación paso a paso.
+
+### 7.6 Qué NO entra en el stack de esta fase
+
+Cloud Run, GKE, Pub/Sub, Redis/Memorystore, el SFU, GPT-Live, Cloud Storage para medios y el proyecto Firebase de COLOQUIO. Todo eso llega con las fases siguientes. Si aparece en un PR de la Fase 0, es alcance que se coló.
+
+## 8. Migraciones y orden de despliegue
 
 Cada paso es aditivo y deja el sistema funcionando. En ningún momento hay una ventana en la que `paneles` esté roto.
 
@@ -328,8 +403,10 @@ Cada paso es aditivo y deja el sistema funcionando. En ningún momento hay una v
 |---|---|---|
 | `boveda/0007` | Catálogo de consentimiento | `finalidad_consentimiento` con las dos finalidades actuales sembradas; FK desde `consentimiento` y `texto_consentimiento`; se retiran los dos `check`. **Sin cambios de comportamiento.** |
 | `boveda/0008` | Finalidades del cualitativo | Las cuatro filas nuevas; `consentimiento.ref_estudio`; validación de ámbito; exigencia de texto activo; trigger sobre `inscripcion.finalidades` |
-| `boveda/0009` | Superficie y control de acceso | `v_persona_convocable`, `v_fatiga_panelista`, `contacto_para_convocatoria`, `sistema_consumidor`, `borrado_pendiente`, `v_borrados_sin_confirmar`, columna `sistema` en auditoría, roles y `grant` |
+| `boveda/0009` | Superficie y control de acceso | `v_persona_convocable`, `v_fatiga_panelista`, `contacto_para_convocatoria`, `sistema_consumidor`, `borrado_pendiente`, `v_borrados_sin_confirmar`, columna `sistema` en auditoría, y los `grant` del rol |
 | `semantica/0004` | Catálogo de PII | Tabla de campos PII del lado semántico y, si la plataforma lo permite, el event trigger de R0.5 |
+
+**Pasos que no son SQL y van antes de `0009`:** la conectividad elegida en §7.4 y la creación del usuario IAM `coloquio_app` con `gcloud`. La migración otorga privilegios a un rol que tiene que existir; si no existe, falla. Van documentados en el manual de despliegue de la fase, no en el archivo `.sql`.
 
 **Orden.** `0007` puede ir sola y sin riesgo: es puro refactor de dominio. `0008` depende de `0007`. `0009` es la que crea acceso externo y va última, porque hasta que exista no hay nada que proteger. `semantica/0004` es independiente y puede ir en paralelo.
 
@@ -337,25 +414,27 @@ Cada paso es aditivo y deja el sistema funcionando. En ningún momento hay una v
 
 **Actualizar** `scripts/verificar_esquema.py` para que conozca las migraciones nuevas, y `CLAUDE.md` para que diga que la bóveda tiene más de un consumidor y que las reglas se hacen valer en la base.
 
-## 8. Dependencias
+## 9. Dependencias
 
 - **Bloqueante, legal:** los textos de las cuatro finalidades nuevas. Bloquean *otorgar*, no implementar: el trabajo técnico arranca sin ellos.
-- **Bloqueante, ingeniería:** confirmar si el rol administrativo de Cloud SQL permite crear event triggers (decide si R0.5 entrega su nivel 2).
+- **Bloqueante, infraestructura:** la conectividad de COLOQUIO a las instancias (§7.4). Las bases no tienen IP pública y COLOQUIO va en otro proyecto: sin Shared VPC, peering o convivencia de proyectos, el rol de R0.4 no le sirve de nada. Es una decisión de red, y va antes de `0009`.
+- **Bloqueante, infraestructura:** crear `coloquio_app` como usuario IAM de cuenta de servicio, **no** con `gcloud sql users create` tradicional (§7.2), y otorgarle `roles/cloudsql.client` y `roles/cloudsql.instanceUser` sobre `gestion-paneles`.
 - **Bloqueante, producto:** definir el `alcance_finalidades` de COLOQUIO en `sistema_consumidor`, porque de eso depende qué bajas le llegan. Propuesta: las cuatro nuevas más `contacto_participacion`.
 - **No bloqueante:** nada de COLOQUIO. Esta fase se hace entera sin que exista una línea del otro sistema.
 
-## 9. Definition of Done
+## 10. Definition of Done
 
 1. Las cuatro migraciones aplican en orden sobre una copia de producción, sin downtime.
 2. **Las 409 pruebas existentes de `paneles` pasan sin modificar ninguna** por cambio de comportamiento. Si alguna hay que tocar, el motivo se documenta en `decisiones.md`.
 3. `muestreo` apoyado en las vistas nuevas devuelve exactamente el mismo conjunto de elegibles que antes, sobre el mismo set de prueba.
-4. El script de verificación de R0.8 pasa entero, conectado como `coloquio_app`.
-5. Las cuatro finalidades nuevas se otorgan y retiran; la de ámbito estudio no cruza entre estudios.
-6. Una baja de prueba genera pendientes, se confirma y se cierra; una baja con consumidor caído queda abierta, listada y reintentable.
-7. El chequeo de PII del lado semántico corre en CI y bloquea el deploy ante una columna prohibida.
-8. `decisiones.md` suma las decisiones de esta fase: por qué el gate es vista y la fatiga es hecho, por qué el contacto es función, por qué el catálogo reemplaza al `check`, y por qué las vistas no llevan `security_invoker`.
+4. El script de verificación de R0.8 pasa entero, conectado como `coloquio_app`, en el cluster de pruebas **y** contra la instancia real con autenticación IAM.
+5. El event trigger de PII está creado en el store semántico y rechaza un `alter table` de prueba.
+6. Las cuatro finalidades nuevas se otorgan y retiran; la de ámbito estudio no cruza entre estudios.
+7. Una baja de prueba genera pendientes, se confirma y se cierra; una baja con consumidor caído queda abierta, listada y reintentable.
+8. El chequeo de PII del lado semántico corre en CI y bloquea el deploy ante una columna prohibida.
+9. `decisiones.md` suma las decisiones de esta fase: por qué el gate es vista y la fatiga es hecho, por qué el contacto es función, por qué el catálogo reemplaza al `check`, por qué las vistas no llevan `security_invoker`, y por qué el rol consumidor es IAM y no un usuario de Cloud SQL.
 
-## 10. Success Metrics
+## 11. Success Metrics
 
 **Leading**
 
@@ -371,9 +450,10 @@ Cada paso es aditivo y deja el sistema funcionando. En ningún momento hay una v
 - Costo de sumar un tercer consumidor, medido en migraciones. El objetivo es cero: una fila y un `grant`.
 - Implementaciones del gate de consentimiento en el repo: debe bajar de dos a una.
 
-## 11. Riesgos y preguntas abiertas
+## 12. Riesgos y preguntas abiertas
 
-- **[ingeniería, bloqueante]** ¿Permite Cloud SQL crear event triggers con el rol administrativo disponible? Decide si R0.5 llega al nivel 2 o se queda en el gate de despliegue. Se responde en una tarde, probando.
+- **[infraestructura, bloqueante]** ¿Shared VPC, peering, o COLOQUIO en el mismo proyecto? (§7.4). Es la única decisión de stack que queda abierta y condiciona `0009`. Recomendación: Shared VPC; el mismo proyecto es una regresión aceptable y reversible si el tiempo aprieta.
+- **[infraestructura]** La autenticación IAM y el comportamiento de `cloudsqlsuperuser` **no se pueden reproducir en el cluster local de pruebas**. La prueba de privilegios efectivos de R0.4 vale igual —enumera lo que hay, no cómo se creó—, pero la conectividad IAM real y la creación del event trigger se verifican una sola vez en la puesta en marcha, no en CI.
 - **[ingeniería]** **La fatiga no es expresable como vista sin parámetros**, porque su cálculo actual excluye la encuesta en curso y sus umbrales son por panel. La decisión de esta spec —exponer hechos y dejar el umbral en el consumidor— mantiene la vista simple y es correcta para el gate legal, pero **deja la política de fatiga sin hacerse valer en la base**. Es una diferencia deliberada entre las dos reglas: el consentimiento es legal y no se negocia; la fatiga es negocio y admite criterios distintos por consumidor. Conviene que quede escrita como decisión y no descubrirla después como omisión.
 - **[ingeniería]** El trigger de `inscripcion.finalidades` valida un `text[]` contra el catálogo. Es el punto más frágil de 7.a, porque es la única validación que no es una FK. Merece prueba propia.
 - **[legal]** ¿`moderacion_automatizada` es una finalidad de tratamiento o un deber de información? Si es lo segundo, el modelo igual sirve, pero el texto y la consecuencia de no aceptarla cambian.
