@@ -1,0 +1,72 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "sesion",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estudioId", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sesion",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "convocatoria",
+      "fieldPath": "idPersona",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "convocatoria",
+      "fieldPath": "esReemplazoDe",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "convocatoria",
+      "fieldPath": "reemplazadoPor",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "convocatoria",
+      "fieldPath": "eventos",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "asistencia",
+      "fieldPath": "idPersona",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "incentivo",
+      "fieldPath": "idPersona",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "participacionCuali",
+      "fieldPath": "sesiones",
+      "indexes": []
+    }
+  ]
+}

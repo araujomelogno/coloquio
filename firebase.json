@@ -1,0 +1,52 @@
+{
+  "hosting": [
+    {
+      "target": "coloquio",
+      "public": "web/public",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "function": {
+            "functionId": "coloquio_api",
+            "region": "southamerica-east1"
+          }
+        },
+        { "source": "**", "destination": "/index.html" }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(js|css)",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        }
+      ],
+      "predeploy": ["python3 scripts/verificar_region.py"]
+    }
+  ],
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "coloquio",
+      "runtime": "python311",
+      "ignore": ["venv", ".venv", ".git", "__pycache__", "tests", ".pytest_cache", "pytest.ini"],
+      "predeploy": [
+        "python3 \"$RESOURCE_DIR/../scripts/verificar_region.py\"",
+        "cd \"$RESOURCE_DIR\" && (test -d venv || python3.11 -m venv venv) && venv/bin/pip install --quiet --disable-pip-version-check -r requirements.txt"
+      ]
+    }
+  ],
+  "firestore": [
+    {
+      "database": "coloquio",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    }
+  ],
+  "emulators": {
+    "auth": { "port": 9099 },
+    "functions": { "port": 5001 },
+    "firestore": { "port": 8080 },
+    "hosting": { "port": 5000 },
+    "ui": { "enabled": true }
+  }
+}

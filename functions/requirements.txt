@@ -1,0 +1,6 @@
+firebase-functions~=0.4.2
+firebase-admin~=6.5.0
+# Base con nombre propio: `firestore.Client(database=...)` (>= 2.12).
+google-cloud-firestore>=2.16,<3
+# Bóveda por IP privada con login IAM de la cuenta de servicio `coloquio-app`.
+cloud-sql-python-connector[pg8000]~=1.9

@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "gestion-paneles"
+  },
+  "targets": {
+    "gestion-paneles": {
+      "hosting": {
+        "coloquio": ["coloquio-equipos"]
+      }
+    }
+  }
+}
