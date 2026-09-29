@@ -2,7 +2,8 @@
 
 Referencias: `docs/PRD_coloquio_detallado.md` (producto), `specs/SPEC_coloquio_fase1.md`
 (la fase en curso), `docs/HANDOFF_coloquio_fase1.md` (cómo se relaciona con `paneles`),
-`docs/DESPLIEGUE_coloquio_fase1.md` (cómo se despliega).
+`docs/DESPLIEGUE_coloquio_fase1.md` (cómo se despliega), `docs/decisiones.md` (por qué está
+hecho así: leerlo antes de revertir algo) y `docs/manual/` (manual de usuario en PDF).
 
 ## Invariantes que no se negocian
 
@@ -47,4 +48,6 @@ python3 scripts/servidor_local.py                        # http://localhost:8765
 - Identificadores y dominio en **español**.
 - Secretos a Secret Manager y **declarados** en `SECRETOS` de `main.py` (una prueba lo verifica).
 - Región `southamerica-east1` en todo; `scripts/verificar_region.py` corre en el predeploy.
+- Si cambia una pantalla, rehacer las capturas y el PDF del manual (`docs/manual/README.md`).
+- Una decisión de diseño nueva y no obvia va a `docs/decisiones.md`, con su prueba si la tiene.
 - Trabajar por fases: no implementar la Fase 2 (sala virtual, grabación) hasta cerrar el DoD de la 1.

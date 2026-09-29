@@ -60,7 +60,7 @@ export async function render(id) {
   main.innerHTML = html + avisos.join('') + `
     <div class="funnel">${PASOS.map((p) => `<div class="funnel-step ${p === 'confirmado' ? 'hl' : ''}"><div class="n">${e.conteo[p] || 0}</div><div class="l">${ETIQUETAS[p]}</div></div>`).join('')}</div>
     <div class="funnel-exits">${SALIDAS.map((s) => `${estado(s)} <b class="small">${e.conteo[s] || 0}</b>`).join('&nbsp;&nbsp;')}</div>
-    <div class="grid-2" style="grid-template-columns: 2fr 1fr">
+    <div class="grid-2 ancha">
       <div class="card">
         <div class="card-header"><div class="seg" id="filtros">${Object.entries({ curso: 'En curso', espera: 'Lista de espera', cerrados: 'Cerrados', todos: 'Todos' }).map(([k, v]) => `<label><input type="radio" name="filtro" value="${k}" ${k === filtro ? 'checked' : ''}/><span>${v}</span></label>`).join('')}</div>
           <div class="toolbar"><a class="btn btn-outline btn-sm" href="#/sesiones/${id}/seleccion">+ Candidatos</a><button class="btn btn-outline btn-sm" id="exportar">Exportar CSV</button></div></div>
@@ -157,10 +157,10 @@ function filaConvocatoria(x, abierta) {
     <td>${segmento(x.segmento)}</td>
     <td>${estado(x.estado)}<div style="margin-top:.2rem">${marcas}</div></td>
     <td>${conv && (x.estado === 'candidato' || enCurso) ? `<select data-canal="${pid}" style="padding:.3rem .5rem;font-size:.75rem;width:auto"><option value="manual" ${x.canal === 'manual' ? 'selected' : ''}>Manual</option><option value="whatsapp" ${x.canal === 'whatsapp' ? 'selected' : ''}>WhatsApp</option></select>` : `<span class="small">${esc(x.canal)}</span>`}</td>
-    <td><div class="td-actions" style="max-width:250px">${botones}${wa}</div></td>
+    <td><div class="td-actions" style="max-width:230px">${botones}${wa}</div></td>
     <td><div class="td-actions">
       ${conv && enCurso ? `<button class="btn btn-ghost btn-xs" data-contacto="celular" data-pid="${pid}" title="Ver celular (auditado)">📞</button><button class="btn btn-ghost btn-xs" data-contacto="email" data-pid="${pid}" title="Ver email (auditado)">✉️</button>` : ''}
-      ${conv && ['invitado', 'contactado', 'acepto'].includes(x.estado) && x.canal === 'manual' ? `<button class="btn btn-ghost btn-xs" data-intento data-pid="${pid}" title="Llamé y no atendió">↻ sin respuesta</button>` : ''}
+      ${conv && ['invitado', 'contactado', 'acepto'].includes(x.estado) && x.canal === 'manual' ? `<button class="btn btn-ghost btn-xs" data-intento data-pid="${pid}" title="Llamé y no atendió: registrar un intento">↻</button>` : ''}
       ${conv && ['se_cayo', 'no_show'].includes(x.estado) && x.requiereReemplazo ? `<button class="btn btn-orange btn-xs" data-reemplazo="${pid}">Reemplazar</button>` : ''}
       ${conv && ['rechazo', 'no_contactable', 'no_show'].includes(x.estado) ? `<button class="btn btn-ghost btn-xs" data-reingreso data-pid="${pid}">Reingresar</button>` : ''}
       ${puede('seleccionar') && abierta && x.estado === 'candidato' ? `<button class="btn btn-ghost btn-xs" data-quitar data-pid="${pid}">Quitar</button>` : ''}

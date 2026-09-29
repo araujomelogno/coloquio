@@ -110,7 +110,7 @@ function pintar(id, s, r) {
   const avisos = (r.avisosCuota || []).map((a) => `<div class="alert alert-error"><span>⛔</span><span>${esc(a.mensaje)}</span></div>`).join('');
   const cabecera = `<tr><th></th><th>Código</th><th>Segmento</th><th>Ranking</th><th>Evidencia</th><th>Historial</th><th></th></tr>`;
   cont.innerHTML = `${deg}${avisos}
-    <div class="grid-2" style="grid-template-columns: 2fr 1fr">
+    <div class="grid-2 ancha">
       <div class="card">
         <div class="card-header"><span class="card-header-title">${r.total} candidatos ${r.abrioSemantica ? '· ranking semántico' : '· demográfica pura'}</span>
           <div class="toolbar"><button class="btn btn-outline btn-sm" id="todos">Seleccionar todos</button>

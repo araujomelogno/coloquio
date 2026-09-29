@@ -154,6 +154,9 @@ button { cursor: pointer; font-family: 'Montserrat', sans-serif; }
 .card-body.tight { padding: 0; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
 .grid-2 > .card + .card { margin-top: 0; }
+/* Sin esto una tabla ancha estira la columna y empuja la de al lado fuera de la pantalla. */
+.grid-2 > * { min-width: 0; }
+.grid-2.ancha { grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); }
 @media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } }
 
 /* ══ TABLE ══ */
@@ -226,18 +229,18 @@ tr.clickable { cursor: pointer; }
 .toolbar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 
 /* ══ CUOTA ══ */
-.cuota-row { display: grid; grid-template-columns: 150px 1fr 110px; gap: 0.8rem; align-items: center; padding: 0.55rem 0; border-bottom: 1px dashed var(--border); }
+.cuota-row { display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 0.8rem; align-items: end; padding: 0.6rem 0; border-bottom: 1px dashed var(--border); }
 .cuota-row:last-child { border-bottom: none; }
 .cuota-name { font-size: 0.78rem; font-weight: 700; color: var(--dark); }
 .cuota-name small { display: block; font-size: 0.64rem; color: var(--gray); letter-spacing: 0.06em; text-transform: uppercase; }
-.bar { height: 12px; background: var(--gray-light); border-radius: 2px; position: relative; overflow: hidden; }
+.bar { grid-column: 1 / -1; grid-row: 2; height: 10px; background: var(--gray-light); border-radius: 2px; position: relative; overflow: hidden; }
 .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green); transition: width .3s; }
 .bar .fill.inv { background: rgba(58,110,165,0.28); }
 .bar .fill.warn { background: var(--amber); }
-.cuota-num { font-size: 0.78rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.cuota-num { font-size: 0.78rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cuota-num .small { font-weight: 600; }
 .cuota-num.falta { color: var(--red); }
 .cuota-num.ok { color: var(--green); }
-@media (max-width: 560px) { .cuota-row { grid-template-columns: 1fr 90px; } .cuota-row .bar { grid-column: 1 / -1; grid-row: 2; } }
 
 /* ══ FUNNEL ══ */
 .funnel { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.4rem; margin-bottom: 0.6rem; }
