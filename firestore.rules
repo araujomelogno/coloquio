@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// ══════════════════════════════════════════════════════════════════════
+//  Base Firestore «coloquio» — store de COLOQUIO (SPEC §6, §7.2)
+//
+//  Es una base CON NOMBRE PROPIO, separada de la base por defecto del
+//  proyecto `gestion-paneles`, que es de `paneles` y guarda una sola cosa:
+//  su padrón de usuarios. Esta base tiene otro régimen, documentado:
+//
+//  · Es PII-free por diseño (R1.12): guarda id_persona, estados, timestamps,
+//    segmentos y referencias. Nunca nombre, documento, email, celular,
+//    dirección ni fecha de nacimiento. Lo hace valer `coloquio/pii.py` en
+//    cada escritura.
+//  · El cliente no lee ni escribe NADA directo. Todo entra y sale por la
+//    función `coloquio_api` con el Admin SDK, que no pasa por estas reglas.
+//    No se replica el modelo de lectura directa desde el navegador.
+// ══════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

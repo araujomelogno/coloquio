@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Equipos Consultores — COLOQUIO</title>
+  <link rel="icon" href="assets/logo-equipos-e.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/estilo.css" />
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       CONFIGURACIÓN — proyecto Firebase `gestion-paneles`
+
+       COLOQUIO comparte proyecto y Firebase Auth con `paneles` (HANDOFF §1):
+       es la misma app web registrada, con el mismo padrón de usuarios.
+       El dominio del sitio de COLOQUIO (coloquio-equipos.web.app) tiene que
+       estar en Authentication → Settings → Authorized domains.
+  ═══════════════════════════════════════════════════════════════════ -->
+  <script>
+    window.firebaseConfig = {
+      apiKey: "AIzaSyDjtIZ3uqfRaKMz7k8rpK1we2X8rZKCW94",
+      authDomain: "gestion-paneles.firebaseapp.com",
+      projectId: "gestion-paneles",
+      storageBucket: "gestion-paneles.firebasestorage.app",
+      messagingSenderId: "692836495350",
+      appId: "1:692836495350:web:7450299a519ee346f521d7"
+    };
+    // Con Firebase Hosting, el rewrite de /api/** hacia `coloquio_api`
+    // (firebase.json) hace que la API comparta origen con la app.
+    window.API_BASE = "/api";
+    window.APP_TZ = "America/Montevideo";
+  </script>
+</head>
+<body>
+  <div id="app">
+    <div class="center-screen"><div class="spinner"></div></div>
+  </div>
+  <div id="toast-wrap"></div>
+  <div id="modal-wrap"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
