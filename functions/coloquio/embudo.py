@@ -18,7 +18,7 @@ recepción, cierre, reemplazo, el webhook de WhatsApp y la cascada, para que
 haya una sola definición de qué hace una transición.
 """
 
-from . import historial, modelo, sesiones, util
+from . import declaracion, historial, modelo, sesiones, util
 from .errores import Conflicto, DatosInvalidos, NoEncontrado, TransicionInvalida
 
 ACTOR_WHATSAPP = "sistema:whatsapp"
@@ -159,6 +159,15 @@ def transicionar(ctx, actor, sesion_id, id_persona, cuerpo):
         raise DatosInvalidos("«Reemplazado» se marca al elegir el reemplazo, no a mano.")
     ahora = ctx.ahora()
 
+    # R5.2.a — invitar es declarar la convocatoria en la bóveda. Va antes de la
+    # transacción y fuera de ella: si la bóveda la rechaza, no se invita.
+    sesion0 = sesiones.exigir(ctx.store, sesion_id)
+    conv0 = ctx.store.get(ruta(sesion_id, id_persona))
+    if conv0 and conv0["estado"] == modelo.CANDIDATO and destino == modelo.INVITADO:
+        sesiones.exigir_abierta(sesion0)
+        camino(conv0["estado"], destino)
+        declaracion.declarar(ctx, sesion_id, sesion0, id_persona)
+
     def tx_fn(tx):
         sesion = tx.get(f"sesion/{sesion_id}")
         if not sesion:
@@ -232,6 +241,16 @@ def reingresar(ctx, actor, sesion_id, id_persona, cuerpo):
         raise DatosInvalidos("Volver a meter a alguien al embudo requiere un motivo.")
     ahora = ctx.ahora()
 
+    # Vuelve a estar invitado: la convocatoria se declara de nuevo (R5.2.a).
+    sesion0 = sesiones.exigir(ctx.store, sesion_id)
+    conv0 = ctx.store.get(ruta(sesion_id, id_persona))
+    if not conv0:
+        raise NoEncontrado("No existe esa convocatoria.")
+    sesiones.exigir_abierta(sesion0)
+    if conv0["estado"] not in modelo.TERMINALES_REINGRESABLES:
+        raise TransicionInvalida("Solo se reingresa desde rechazó, no contactable o no-show.")
+    declaracion.declarar(ctx, sesion_id, sesion0, id_persona)
+
     def tx_fn(tx):
         sesion = tx.get(f"sesion/{sesion_id}")
         conv = tx.get(ruta(sesion_id, id_persona))
@@ -284,6 +303,15 @@ def invitar_propuestos(ctx, actor, sesion_id, cuerpo):
         raise DatosInvalidos("Canal inválido.")
     ahora = ctx.ahora()
 
+    # R5.2.a — se declaran primero, fuera de la transacción. Quien la bóveda
+    # rechaza (retiró el consentimiento) queda como candidato y se informa.
+    sesion0 = sesiones.exigir(ctx.store, sesion_id)
+    sesiones.exigir_abierta(sesion0)
+    previos = ctx.store.get_many([ruta(sesion_id, i) for i in ids])
+    candidatos = [i for i in ids if (previos.get(ruta(sesion_id, i)) or {}).get("estado") == modelo.CANDIDATO]
+    declarados, no_declarados = declaracion.declarar_varias(ctx, sesion_id, sesion0, candidatos)
+    ids = declarados
+
     def tx_fn(tx):
         sesion = tx.get(f"sesion/{sesion_id}")
         if not sesion:
@@ -301,7 +329,7 @@ def invitar_propuestos(ctx, actor, sesion_id, cuerpo):
         for i, conv in invitados:
             tx.set(ruta(sesion_id, i), conv)
         tx.update(f"sesion/{sesion_id}", _campos_sesion(sesion))
-        return {"invitados": [i for i, _ in invitados]}
+        return {"invitados": [i for i, _ in invitados], "noDeclarados": no_declarados}
 
     return ctx.store.transaccion(tx_fn)
 

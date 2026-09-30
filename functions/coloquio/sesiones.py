@@ -141,12 +141,14 @@ def editar(ctx, actor, sesion_id, cuerpo):
     lo decide el cliente.
     """
     campos = _campos(ctx, cuerpo, parcial=True)
+    reprogramada = []
 
     def tx_fn(tx):
         sesion = tx.get(f"sesion/{sesion_id}")
         if not sesion:
             raise NoEncontrado("No existe esa sesión.")
         exigir_abierta(sesion)
+        reprogramada[:] = ["fecha" in campos and campos["fecha"] != sesion.get("fecha")]
         convocatorias = [d for _, d in tx.listar(f"sesion/{sesion_id}/convocatoria")]
         cambios = dict(campos)
         cupo = cambios.get("cupoObjetivo", sesion["cupoObjetivo"])
@@ -161,7 +163,15 @@ def editar(ctx, actor, sesion_id, cuerpo):
         tx.update(f"sesion/{sesion_id}", cambios)
         return {"id": sesion_id, **sesion, **cambios}
 
-    return ctx.store.transaccion(tx_fn)
+    resultado = ctx.store.transaccion(tx_fn)
+    if reprogramada and reprogramada[0]:
+        # R5.2.a — reprogramar es volver a declarar con la misma referencia y
+        # la fecha nueva: la bóveda actualiza el vencimiento, no duplica.
+        from . import declaracion, embudo
+
+        resultado["redeclaracion"] = declaracion.redeclarar_sesion(
+            ctx, sesion_id, resultado, embudo.convocatorias(ctx.store, sesion_id))
+    return resultado
 
 
 def listar(ctx, estado=None, desde=None, hasta=None):

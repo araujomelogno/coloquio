@@ -2,8 +2,15 @@
 
 **Para:** equipo de `paneles` (repo `araujomelogno/paneles`)
 **Origen:** desarrollo de COLOQUIO Fase 1
-**Estado:** **bloqueante para convocar en producción** · propuesta, no aplicada
+**Estado:** **resuelto** — aplicada en `paneles` como R5.2.a (`boveda/0016_convocatoria_externa.sql`), e implementada en COLOQUIO el 2026-09-30
 **Fecha:** 2026-09-26
+
+> **Qué quedó de esta propuesta.** `paneles` aplicó la variante propuesta, con
+> dos agregados: la declaración vencida se purga a los 30 días, y la FK a
+> `persona` con `on delete cascade`, más `generar_borrados_pendientes()`, se
+> llevan las declaraciones en la baja. COLOQUIO declara al invitar, al
+> reingresar y al reprogramar: ver `docs/decisiones.md`, D44 a D47. El resto
+> del documento queda como registro de por qué se hizo.
 
 ---
 
@@ -100,12 +107,11 @@ Más: la cascada de baja borra `convocatoria_externa` de la persona, la lista
 blanca de `scripts/verificar_coloquio.py` suma la función, y hay que decidir
 si la bóveda purga las declaraciones vencidas (sugerido: sí, a los 30 días).
 
-## Lo que cambia en COLOQUIO si se aprueba
+## Lo que cambió en COLOQUIO
 
 Una llamada a `declarar_convocatoria(id_persona, sesion_id, fecha_sesion + 2 días)`
-al invitar (paso `candidato → invitado`), fuera de la transacción de Firestore.
-Es un cambio chico en `coloquio/boveda.py` y `coloquio/embudo.py`; se hace
-cuando la migración esté aplicada.
+al invitar (paso `candidato → invitado`), fuera de la transacción de Firestore
+y antes de ella. Está en `coloquio/declaracion.py`.
 
 ## Alternativa descartada
 

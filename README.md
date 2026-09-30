@@ -13,7 +13,7 @@ participación propio, incentivos y cascada de baja.
 - **Manual de usuario:** [`docs/manual/Manual_de_usuario.pdf`](docs/manual/Manual_de_usuario.pdf)
 - Decisiones de diseño: [`docs/decisiones.md`](docs/decisiones.md)
 - **Despliegue:** [`docs/DESPLIEGUE_coloquio_fase1.md`](docs/DESPLIEGUE_coloquio_fase1.md)
-- Bloqueante en `paneles`: [`docs/PROPUESTA_paneles_contacto_coloquio.md`](docs/PROPUESTA_paneles_contacto_coloquio.md)
+- Convocatoria declarada en la bóveda (R5.2.a, resuelto): [`docs/PROPUESTA_paneles_contacto_coloquio.md`](docs/PROPUESTA_paneles_contacto_coloquio.md)
 
 ## Probarlo en local
 

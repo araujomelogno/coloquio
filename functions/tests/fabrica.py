@@ -101,10 +101,10 @@ class Reloj:
 def armar_contexto(n=96, personas=None, st=None):
     personas = personas or panel(n)
     st = st or store.StoreMemoria()
-    bov = boveda.BovedaMemoria(personas)
+    reloj = Reloj()
+    bov = boveda.BovedaMemoria(personas, reloj=reloj)
     mot = motor.MotorMemoria(corpus(personas))
     canal = CanalFalso()
-    reloj = Reloj()
     ctx = contexto.Contexto(st, boveda=bov, motor=mot, canal_wa=canal, reloj=reloj,
                             fabrica_boveda=lambda: bov)
     ctx._boveda = None  # perezosa, para poder comprobar que no se abrió
