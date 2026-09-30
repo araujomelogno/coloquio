@@ -13,7 +13,7 @@
   coincide, hay que aceptarlo explícitamente y queda registrado igual.
 """
 
-from . import configuracion, embudo, historial, modelo, seleccion, sesiones, util
+from . import configuracion, declaracion, embudo, historial, modelo, seleccion, sesiones, util
 from .errores import Conflicto, DatosInvalidos, NoEncontrado
 
 
@@ -166,6 +166,17 @@ def _reemplazar(ctx, actor, sesion_id, cuerpo):
                 "Ese candidato no restituye el segmento perdido (difiere en "
                 f"{', '.join(rompe)}). Para usarlo igual hay que aceptar la cuota "
                 "incompleta explícitamente.", {"rompe": rompe})
+        # Queda invitado: se declara antes (R5.2.a). Si la bóveda la rechaza,
+        # no entra al embudo. Pero solo si va a poder entrar: si la frena la
+        # fatiga (sin motivo) o ya está en otra sesión del estudio,
+        # `_incorporar_tx` lo rechaza y no tiene que quedar una declaración.
+        hist = ctx.store.get(historial.ruta(reemplazo_id))
+        fatiga = historial.evaluar_fatiga(hist, sesion["categoria"], configuracion.fatiga(ctx.store), ahora)
+        motivo = str((cuerpo.get("anulacion") or {}).get("motivo") or "").strip()
+        entra = (not historial.sesion_del_mismo_estudio(hist, sesion["estudioId"], excepto_sesion=sesion_id)
+                 and (not fatiga["excluido"] or (motivo and actor.puede("anular_fatiga"))))
+        if entra:
+            declaracion.declarar(ctx, sesion_id, sesion, reemplazo_id)
         seleccion._incorporar_tx(
             ctx, actor, sesion_id, {reemplazo_id: cuerpo}, vigentes, [],
             str((cuerpo.get("anulacion") or {}).get("motivo") or ""),
@@ -173,6 +184,14 @@ def _reemplazar(ctx, actor, sesion_id, cuerpo):
             es_reemplazo_de=perdido["id"], estado_final=modelo.INVITADO)
     elif en_espera["estado"] != modelo.CANDIDATO:
         raise Conflicto("El reemplazo tiene que estar en la lista de espera (estado candidato).")
+    else:
+        rompe = _diferencias(en_espera["segmento"], perdido["segmento"], dims)
+        if rompe and not acepta_romper:
+            raise Conflicto(
+                "Ese candidato no restituye el segmento perdido (difiere en "
+                f"{', '.join(rompe)}). Para usarlo igual hay que aceptar la cuota "
+                "incompleta explícitamente.", {"rompe": rompe})
+        declaracion.declarar(ctx, sesion_id, sesion, reemplazo_id)
 
     def tx_fn(tx):
         s = tx.get(f"sesion/{sesion_id}")
@@ -240,4 +259,10 @@ def _sin_reemplazo(ctx, actor, sesion_id, cuerpo):
             "decisionesCuota": s["decisionesCuota"]})
         return {"salida": salida, "detalle": detalle}
 
-    return ctx.store.transaccion(tx_fn)
+    resultado = ctx.store.transaccion(tx_fn)
+    if salida == "correr_fecha":
+        # Reprogramar es volver a declarar la misma referencia con otra fecha.
+        s = sesiones.exigir(ctx.store, sesion_id)
+        resultado["redeclaracion"] = declaracion.redeclarar_sesion(
+            ctx, sesion_id, s, embudo.convocatorias(ctx.store, sesion_id))
+    return resultado

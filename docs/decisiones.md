@@ -2,7 +2,7 @@
 
 **Sistema:** COLOQUIO · investigación cualitativa · Equipos Consultores
 **Alcance:** Fase 1 — estudio cualitativo y embudo de convocatoria
-**Última actualización:** 2026-09-29
+**Última actualización:** 2026-09-30
 
 ---
 
@@ -80,8 +80,10 @@ restricción real del sistema. Las pruebas están en `functions/tests/`.
 | [D41](#d41) | Borrar, verificar, y recién después confirmar | I · Cascada |
 | [D42](#d42) | Con la persona se va su código y toda referencia cruzada | I |
 | [D43](#d43) | Qué alcances de baja borran en la Fase 1 | I |
-| [D44](#d44) | `contacto_para_convocatoria()` hoy rechaza a COLOQUIO | J · Abierto |
-| [D45](#d45) | Los umbrales de fatiga son un punto de partida, no una definición | J |
+| [D44](#d44) | La convocatoria se declara en la bóveda al invitar, antes de la transacción | J · Convocatoria declarada |
+| [D46](#d46) | El vencimiento es la sesión más dos días, con el tope de la bóveda | J |
+| [D47](#d47) | Si la declaración venció, se repone al leer el contacto, una vez | J |
+| [D45](#d45) | Los umbrales de fatiga son un punto de partida, no una definición | K · Abierto |
 
 ---
 
@@ -352,10 +354,12 @@ auditoría registre el email.
 Python se vuelve una promesa repetida en dos bases de código.
 
 **La decisión.** COLOQUIO usa únicamente `v_persona_convocable`,
-`contacto_para_convocatoria()`, `mis_borrados_pendientes()`,
-`confirmar_borrado()`, `reportar_error_de_borrado()` y
-`sistema_de_la_conexion()`. **El gate es la vista**: no hay un `if` en COLOQUIO
-que decida quién consintió. Cero escrituras.
+`declarar_convocatoria()`, `contacto_para_convocatoria()`,
+`mis_borrados_pendientes()`, `confirmar_borrado()`,
+`reportar_error_de_borrado()` y `sistema_de_la_conexion()`. **El gate es la
+vista**: no hay un `if` en COLOQUIO que decida quién consintió. La única
+escritura es `declarar_convocatoria()` (R5.2.a, D44), y es una función de la
+superficie, no una tabla.
 
 Se conecta como `coloquio-app@…` con login IAM, por IP privada, con el Cloud SQL
 Connector.
@@ -369,8 +373,8 @@ usa: mide otra cosa (D14).
 **Dónde vive.** `coloquio/boveda.py`.
 
 **Cómo se verifica.** `test_boveda_solo_superficie_fase5` lee el SQL de
-`BovedaPostgres` y falla si aparece una relación fuera de la lista o un
-`insert`/`update`/`delete`. Del lado de `paneles`, `scripts/verificar_coloquio.py`
+`BovedaPostgres` y falla si aparece una relación o una función fuera de la
+lista, o un `insert`/`update`/`delete`. Del lado de `paneles`, `scripts/verificar_coloquio.py`
 controla los privilegios efectivos.
 
 ---
@@ -1075,29 +1079,115 @@ dependan de ellas, y se cuentan aparte (`sinDatosEnFase1`).
 
 ---
 
-# Bloque J · Lo que quedó abierto
+# Bloque J · La convocatoria declarada (R5.2.a)
 
 <a id="d44"></a>
-## D44 · `contacto_para_convocatoria()` hoy rechaza a COLOQUIO
+## D44 · La convocatoria se declara en la bóveda al invitar, antes de la transacción
 
-**El problema.** La función exige una «convocatoria activa», pero la verifica
-solo contra `participacion` y `encuesta` de `paneles`. La SPEC de la Fase 5
-decía «en el sistema que llama». COLOQUIO no puede escribir ahí, y sus
-convocatorias viven en Firestore.
+**El problema.** `contacto_para_convocatoria()` exige una convocatoria activa en
+el sistema que llama. La `0014` la verificaba solo contra las encuestas de
+`paneles`, y rechazaba a COLOQUIO. Desde la `boveda/0016` (R5.2.a) el consumidor
+la **declara** con `declarar_convocatoria(id_persona, referencia, vence_en)`. La
+función reaplica el gate de consentimiento, tiene un tope de 60 días y, con la
+misma referencia, actualiza en vez de duplicar.
 
-**La decisión de COLOQUIO.** Manejar el rechazo sin romper nada: el embudo
-muestra el mensaje de la bóveda, y WhatsApp degrada a manual. La corrección es
-de `paneles`: una función `declarar_convocatoria()` en la superficie, que
-COLOQUIO llamaría al invitar.
+**La decisión.** Se declara en cada paso que deja a alguien **invitado**:
 
-**Consecuencias.** **Bloqueante para convocar en producción.** Todo lo demás se
-puede desplegar.
+- la lista de invitación, el botón de la fila, el reemplazo y la invitación por
+  WhatsApp (`candidato → invitado`);
+- el **reingreso** desde un terminal, porque vuelve a estar invitado;
+- la **reprogramación** de la sesión, desde Armado o desde «correr la fecha».
+  En ese caso se redeclara a todos los que siguen en curso, con la misma
+  referencia y la fecha nueva.
 
-**Dónde vive.** `docs/PROPUESTA_paneles_contacto_coloquio.md`.
+La referencia es el **id de sesión de COLOQUIO**. La declaración va **fuera de
+la transacción de Firestore y antes de ella**. Si la bóveda la rechaza (retiró
+el consentimiento) o no responde, la persona queda como candidato. En la lista
+de invitación, los rechazados se informan uno por uno (`noDeclarados`) y el
+resto se invita igual.
 
-**Cómo se verifica.** `test_rechazo_por_convocatoria_activa_se_informa`.
+**Alternativas descartadas.**
+
+- *Declarar después de la transacción.* Si la bóveda fallaba, quedaba en
+  COLOQUIO alguien «invitado» cuyo contacto la bóveda no iba a entregar, y el
+  coordinador se enteraba al intentar llamarlo.
+- *Declarar adentro de la transacción.* Firestore puede reintentarla (D22), y la
+  bóveda no participa de ella.
+- *Declarar al leer el contacto.* Haría de «leer un contacto» la forma de
+  convocar, y el contrato pide lo contrario: el motivo va primero. Leer el
+  contacto de un candidato que nunca se invitó ahora se rechaza del lado de
+  COLOQUIO.
+
+**Consecuencias.** Si la transacción falla después de declarar (una carrera),
+queda una declaración sin invitación. No abre nada que no estuviera ya: la
+persona consintió y está en la sesión. Vence sola y la bóveda la purga. Reprogramar
+no falla si la bóveda no responde, porque la reprogramación ya ocurrió en
+COLOQUIO: la pantalla lo avisa, y D47 lo repone.
+
+**Dónde vive.** `coloquio/declaracion.py`, y sus llamadas en `embudo.py`
+(`transicionar`, `reingresar`, `invitar_propuestos`), `canales.py`,
+`reemplazo.py` y `sesiones.py` (`editar`).
+
+**Cómo se verifica.** `tests/test_declaracion.py`, en particular
+`test_se_declara_antes_de_la_transaccion` (con la bóveda caída nadie queda
+invitado), `test_si_la_boveda_rechaza_no_queda_invitado`,
+`test_reprogramar_actualiza_no_duplica` y
+`test_el_candidato_no_invitado_no_tiene_contacto`.
 
 ---
+
+<a id="d46"></a>
+## D46 · El vencimiento es la sesión más dos días, con el tope de la bóveda
+
+**El problema.** El contrato pide `fecha_sesion + 2 días`, y la bóveda rechaza
+más de 60. Una sesión que se arma con más de 58 días de anticipación rompe la
+cuenta.
+
+**La decisión.** `min(fecha + 2 días, ahora + 59 días)`, con un día de margen
+bajo el tope para no rozarlo por diferencias de reloj entre la función y la
+base. Si la sesión ya pasó hace más de dos días, no se declara, y el error lo
+explica.
+
+**Alternativas descartadas.** *Dejar que la bóveda rechace.* No se podría
+convocar para una sesión lejana hasta que falten menos de 58 días, sin ningún
+motivo de privacidad para esa espera.
+
+**Consecuencias.** En una sesión muy lejana, la declaración vence antes que la
+sesión. Se renueva al reprogramar o al leer un contacto (D47).
+
+**Dónde vive.** `coloquio/declaracion.py` (`vencimiento`).
+
+**Cómo se verifica.** `test_tope_de_sesenta_dias`,
+`test_vencimiento_rechaza_sesiones_pasadas`.
+
+---
+
+<a id="d47"></a>
+## D47 · Si la declaración venció, se repone al leer el contacto, una vez
+
+**El problema.** Una declaración puede vencer mientras la convocatoria sigue
+viva: una sesión lejana (D46), una reprogramación con la bóveda caída, o una
+invitación hecha antes de R5.2.a.
+
+**La decisión.** Si la bóveda rechaza la lectura de contacto de alguien **en
+curso** (invitado, contactado, aceptó o confirmado), COLOQUIO vuelve a declarar
+y reintenta **una sola vez**. Si la causa era el consentimiento, la declaración
+también falla, y ese es el error que se muestra.
+
+**Alternativas descartadas.** *Distinguir la causa por el texto del error de la
+bóveda.* Sería frágil. Redeclarar es idempotente, y la declaración ya separa el
+caso del consentimiento por su cuenta.
+
+**Consecuencias.** `p_actor` sigue siendo siempre el email del usuario humano
+en las dos lecturas (D8).
+
+**Dónde vive.** `coloquio/canales.py` (`leer_contacto`).
+
+**Cómo se verifica.** `test_declaracion_vencida_se_repone_al_leer_el_contacto`.
+
+---
+
+# Bloque K · Lo que quedó abierto
 
 <a id="d45"></a>
 ## D45 · Los umbrales de fatiga son un punto de partida, no una definición

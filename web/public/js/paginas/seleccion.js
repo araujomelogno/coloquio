@@ -186,6 +186,8 @@ async function proponer(id) {
       try {
         const r = await api.sesiones.invitar(id, { ids: p.propuestos, canal: $('#canal', el).value });
         cerrar(); toast(`${r.invitados.length} invitados. Seguí la convocatoria desde el embudo.`, 'ok');
+        // R5.2.a — la bóveda no aceptó la convocatoria (retiró el consentimiento): quedan en espera.
+        if (r.noDeclarados?.length) toast(`${r.noDeclarados.length} no se pudieron invitar: la bóveda no aceptó la convocatoria (sin consentimiento vigente). Quedan en la lista de espera.`, 'err');
         location.hash = `#/sesiones/${id}/embudo`;
       } catch (err) { error(err); }
     };

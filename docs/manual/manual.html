@@ -402,6 +402,14 @@
     persona.</li>
     <li>Llamá o escribí por fuera del sistema, y volvé a registrar el resultado.</li>
   </ol>
+  <div class="aviso info">
+    <div class="t">Primero se invita, después se llama</div>
+    <p>El contacto se puede ver solo de quien ya está <strong>invitado</strong>. Al
+    invitar, COLOQUIO le avisa a la bóveda que hay una convocatoria para esa
+    persona en esta sesión, y sin ese aviso la bóveda no entrega el teléfono. Si
+    la persona retiró su consentimiento, la bóveda no acepta el aviso: la persona
+    queda en la lista de espera y el sistema te lo dice.</p>
+  </div>
   <figure><img class="recorte media" src="capturas/17-contacto.jpg" />
     <figcaption><b>Contacto puntual.</b> La lectura queda registrada a tu nombre en la bóveda. En COLOQUIO no se guarda.</figcaption></figure>
 
@@ -771,9 +779,22 @@
   (6.4).</p>
 
   <h4>Al pedir un contacto aparece «La bóveda no entregó el contacto». ¿Qué hago?</h4>
-  <p>La bóveda rechazó la lectura: o la persona retiró su consentimiento, o no tiene
-  una convocatoria activa registrada. No hay forma de saltearlo desde COLOQUIO. Si
-  pasa con muchas personas a la vez, avisale al administrador.</p>
+  <p>La bóveda rechazó la lectura. Casi siempre es porque la persona retiró su
+  consentimiento después de ser invitada, y no hay forma de saltearlo desde
+  COLOQUIO. Si la convocatoria había vencido (por ejemplo, porque la sesión se
+  corrió de fecha), COLOQUIO la renueva solo y vuelve a pedir el contacto: si
+  igual aparece el mensaje, es el consentimiento. Si pasa con muchas personas a
+  la vez, avisale al administrador.</p>
+
+  <h4>Invité a una lista y algunos quedaron en espera.</h4>
+  <p>La bóveda no aceptó su convocatoria porque ya no tienen consentimiento vigente
+  de contacto. El sistema lo avisa al invitar, y esas personas no se pueden
+  convocar.</p>
+
+  <h4>Corrí la fecha de la sesión. ¿Tengo que hacer algo con los invitados?</h4>
+  <p>No. Al guardar la fecha nueva, COLOQUIO le actualiza a la bóveda la
+  convocatoria de todos los que siguen en curso. Si la bóveda no responde en ese
+  momento, lo avisa, y se corrige solo la próxima vez que pidas un contacto.</p>
 
   <h4>Un candidato que quiero no aparece en la selección.</h4>
   <p>Puede ser que no tenga consentimiento de contacto vigente (no aparece nunca), que

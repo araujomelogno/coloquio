@@ -4,7 +4,7 @@
 **Cubre:** SPEC `specs/SPEC_coloquio_fase1.md` (R1.1 a R1.13, más dos P1: importación histórica y tablero)
 **Proyecto GCP:** `gestion-paneles` (el mismo que `paneles`, HANDOFF §1)
 **Región:** `southamerica-east1` en todo
-**Fecha:** 2026-09-26
+**Fecha:** 2026-09-26 · **Revisión 2026-09-30:** R5.2.a (convocatoria declarada)
 
 ---
 
@@ -23,17 +23,18 @@ Lo que **no** cambia: la bóveda, el store semántico, las funciones y el sitio 
 `paneles`. El codebase separado hace que `firebase deploy` de COLOQUIO no toque
 las funciones de `paneles`, y el target de Hosting propio, que no toque su sitio.
 
-### Estado de la precondición: hay un bloqueante
+### La precondición: R5.2.a aplicada en la bóveda
 
-Antes de desplegar hay que saber esto: **`contacto_para_convocatoria()` hoy
-rechaza a COLOQUIO**, porque verifica la «convocatoria activa» solo contra las
-encuestas de `paneles`. Sin contacto no se puede convocar. Está explicado, con
-una migración propuesta, en
-[`PROPUESTA_paneles_contacto_coloquio.md`](PROPUESTA_paneles_contacto_coloquio.md).
+COLOQUIO **declara** cada convocatoria en la bóveda al invitar
+(`declarar_convocatoria()`, migración `boveda/0016` de `paneles`), y sin esa
+declaración `contacto_para_convocatoria()` no entrega el contacto. Por eso la
+`0016` tiene que estar aplicada **antes** de desplegar esta versión (1.2). La
+historia del cambio está en
+[`PROPUESTA_paneles_contacto_coloquio.md`](PROPUESTA_paneles_contacto_coloquio.md),
+y cómo lo hace COLOQUIO, en `docs/decisiones.md` (D44, D46 y D47).
 
-Se puede desplegar igual (todo lo demás funciona, y el rechazo se muestra bien
-en la pantalla), pero **no se puede correr el DoD de punta a punta** hasta que
-`paneles` aplique esa migración.
+> **¿La Fase 1 ya estaba desplegada?** Para actualizarla a R5.2.a alcanza con
+> [`DESPLIEGUE_R5.2.a.md`](DESPLIEGUE_R5.2.a.md): no hay configuración nueva.
 
 ---
 
@@ -46,15 +47,22 @@ gcloud config set project gestion-paneles
 psql "$DSN_BOVEDA" -c "select codigo, activo, rol_bd from sistema_consumidor;"
 #   coloquio | f | coloquio-app@gestion-paneles.iam
 
-# 1.2 La batería de la Fase 0, conectada como coloquio (ver paneles/docs/DESPLIEGUE - COLOQUIO Fase 0.md §7.1)
-python3 scripts/verificar_coloquio.py          # en el repo paneles; 12/14 esperado hoy
+# 1.2 R5.2.a aplicada: existe declarar_convocatoria() y coloquio_app la puede ejecutar
+psql "$DSN_BOVEDA" -c "select has_function_privilege('coloquio_app',
+  'declarar_convocatoria(uuid, text, timestamptz)', 'execute');"
+#   t
 
-# 1.3 Ubicación de la base Firestore por defecto (es INMUTABLE: confirmar antes de crear nada)
+# 1.3 La batería, conectada como coloquio (paneles/docs/DESPLIEGUE - R5.2.a convocatoria externa.md)
+python3 scripts/verificar_coloquio.py          # en el repo paneles
+#   16 chequeos; los dos de R5.2.a en verde. Contra Cloud SQL, los dos rojos
+#   conocidos de la Fase 0 (p_actor en el test y rol sin credenciales) siguen igual.
+
+# 1.4 Ubicación de la base Firestore por defecto (es INMUTABLE: confirmar antes de crear nada)
 gcloud firestore databases describe --database='(default)' --format='value(locationId)'
 #   southamerica-east1
 ```
 
-Si 1.3 no da `southamerica-east1`, **parar** y decidir con el equipo: la base
+Si 1.4 no da `southamerica-east1`, **parar** y decidir con el equipo: la base
 de COLOQUIO va igual en `southamerica-east1` (es la región de la bóveda y de las
 funciones), pero conviene saberlo.
 
@@ -239,13 +247,33 @@ El canal manual funciona sin esto. Para el de WhatsApp:
 **Automática, antes de desplegar:**
 
 ```bash
-cd functions && python3 -m pytest -q                       # 69 pruebas, en memoria
+cd functions && python3 -m pytest -q                       # 84 pruebas, en memoria
 # y contra la implementación real de Firestore, con el emulador:
 firebase emulators:start --only firestore --project demo-coloquio &
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python3 -m pytest -q
 ```
 
-`tests/test_dod.py` recorre los once puntos del DoD en ese orden.
+`tests/test_dod.py` recorre los once puntos del DoD en ese orden, y
+`tests/test_declaracion.py` el contrato de R5.2.a.
+
+**Contra la bóveda de verdad** (las migraciones de `paneles` en el cluster de
+pruebas, conectado como `coloquio_app`):
+
+```bash
+source ../paneles/scripts/pg_pruebas.sh
+python3 scripts/integracion_boveda.py      # 11 chequeos; escribe filas de prueba: nunca contra producción
+```
+
+**Una prueba de R5.2.a contra la bóveda real**, con una persona de prueba:
+invitarla desde el embudo, abrir «📞» (tiene que mostrar el celular) y verificar
+del lado de la bóveda que quedó la declaración y la lectura con el email humano:
+
+```sql
+select sistema, referencia, vence_en from convocatoria_externa where id_persona = '<id>';
+--   coloquio | <id de la sesión> | <fecha de la sesión + 2 días>
+select actor_uid, sistema from reidentificacion where id_persona = '<id>' order by creado_en desc limit 1;
+--   <email del coordinador> | coloquio      ← nunca «coloquio» en actor_uid
+```
 
 **Manual, en producción** (una sesión real o de prueba):
 

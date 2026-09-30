@@ -6,13 +6,15 @@ permite exactamente esto (HANDOFF §2, «DESPLIEGUE - COLOQUIO Fase 0» §5):
 
     lectura    v_persona_convocable, v_fatiga_panelista, v_finalidad,
                v_texto_consentimiento_activo
-    ejecución  contacto_para_convocatoria(), mis_borrados_pendientes(),
-               confirmar_borrado(), reportar_error_de_borrado(),
-               sistema_de_la_conexion()
+    ejecución  declarar_convocatoria(), contacto_para_convocatoria(),
+               mis_borrados_pendientes(), confirmar_borrado(),
+               reportar_error_de_borrado(), sistema_de_la_conexion()
 
 Todo lo demás da `permission denied`, y es por diseño. Este módulo no intenta
 leer `persona`, `consentimiento` ni `participacion`, y **no escribe** nada
-fuera de lo que esas funciones hacen por su cuenta (DoD 11).
+fuera de lo que esas funciones hacen por su cuenta (DoD 11). La única
+escritura propia es `declarar_convocatoria()` (R5.2.a, `boveda/0016`): sin una
+convocatoria declarada, la bóveda no entrega el contacto.
 
 Tres reglas que este módulo hace cumplir y que no conviene reimplementar en
 otro lado:
@@ -28,11 +30,17 @@ otro lado:
 """
 
 import contextlib
+import datetime as dt
 import threading
 
-from .errores import ContactoRechazado, DatosInvalidos, ServicioNoDisponible
+from .errores import (
+    ContactoRechazado, ConvocatoriaRechazada, DatosInvalidos, ServicioNoDisponible,
+)
 
 FINALIDAD_CONTACTO = "contacto_participacion"
+
+# R5.2.a — la bóveda rechaza una declaración que venza a más de 60 días.
+TOPE_DECLARACION_DIAS = 60
 
 # Columnas de la vista → claves del segmento en COLOQUIO.
 DIMENSIONES = ("sexo", "tramoEtario", "localidad")
@@ -60,6 +68,15 @@ class Boveda:
         `filtros`: {sexo: [..], tramoEtario: [..], localidad: [..],
         edadMin, edadMax}. `ids`: restringe a ese conjunto (para cruzar con
         el ranking semántico). Devuelve [{idPersona, segmento, edad}].
+        """
+        raise NotImplementedError
+
+    def declarar_convocatoria(self, id_persona, referencia, vence_en):
+        """R5.2.a — declara que COLOQUIO convocó a esta persona.
+
+        `referencia` es el id de sesión de COLOQUIO (opaco para la bóveda).
+        Volver a declarar la misma referencia actualiza el vencimiento: es lo
+        que se hace al reprogramar. Reaplica el gate de consentimiento.
         """
         raise NotImplementedError
 
@@ -93,6 +110,11 @@ def _exigir_actor(actor_email):
 def _validar_canal(canal):
     if canal not in ("email", "celular"):
         raise DatosInvalidos("El canal de contacto es `email` o `celular`, uno por vez.")
+
+
+def _validar_referencia(referencia):
+    if not str(referencia or "").strip():
+        raise DatosInvalidos("La declaración de convocatoria necesita la referencia de la sesión.")
 
 
 def _armar_where(filtros, ids, ref_estudio):
@@ -229,6 +251,22 @@ class BovedaPostgres(Boveda):
         return [{"idPersona": f["id_persona"], "segmento": segmento_de(f),
                  "edad": f.get("edad")} for f in filas]
 
+    def declarar_convocatoria(self, id_persona, referencia, vence_en):
+        _validar_referencia(referencia)
+        try:
+            self._filas("select declarar_convocatoria(%s::uuid, %s, %s)",
+                        (str(id_persona), str(referencia), vence_en))
+        except ServicioNoDisponible:
+            raise
+        except Exception as error:  # noqa: BLE001
+            estado = _sqlstate(error)
+            if estado == "42501":
+                raise ConvocatoriaRechazada(
+                    "La bóveda no aceptó la convocatoria: " + _mensaje_bd(error))
+            if estado == "22023":
+                raise DatosInvalidos("La bóveda rechazó la declaración: " + _mensaje_bd(error))
+            raise
+
     def contacto(self, id_persona, canal, actor_email, motivo="convocatoria coloquio"):
         _validar_canal(canal)
         _exigir_actor(actor_email)
@@ -282,20 +320,27 @@ class BovedaMemoria(Boveda):
     `personas`: {id: {segmento, edad, consiente, celular, email}}. Los datos de
     contacto viven acá y solo acá, igual que en la bóveda real.
 
-    `exigir_convocatoria_activa` reproduce el chequeo de la `0014` que hoy
-    rechaza a COLOQUIO (ver docs/PROPUESTA_paneles_contacto_coloquio.md).
+    Reproduce el contrato de R5.2.a (`boveda/0016`): `contacto()` exige una
+    convocatoria declarada y vigente para COLOQUIO, y `declarar_convocatoria()`
+    reaplica el gate, rechaza vencimientos pasados o a más de 60 días, y
+    actualiza en vez de duplicar. `exigir_convocatoria_activa=False` apaga el
+    chequeo, para probar partes que no tienen que ver con él.
     """
 
     nombre = "memoria"
 
-    def __init__(self, personas=None, exigir_convocatoria_activa=False):
+    def __init__(self, personas=None, exigir_convocatoria_activa=True, reloj=None):
         self.personas = personas or {}
         self.auditoria = []
         self.pendientes = {}
         self.confirmados = []
         self.errores = []
         self.exigir_convocatoria_activa = exigir_convocatoria_activa
-        self.convocatorias_activas = set()
+        # {(id_persona, referencia): vence_en}
+        self.declaraciones = {}
+        self.llamadas_declarar = []
+        self.reloj = reloj or (lambda: dt.datetime.now(dt.timezone.utc))
+        self.falla = None  # simular la bóveda caída
 
     def _pasa(self, p, filtros, ref_estudio):
         if not p.get("consiente", True):
@@ -326,20 +371,47 @@ class BovedaMemoria(Boveda):
         ]
         return salida[:limite]
 
+    def _consiente(self, id_persona):
+        p = self.personas.get(str(id_persona))
+        return bool(p and p.get("consiente", True))
+
+    def declarar_convocatoria(self, id_persona, referencia, vence_en):
+        if self.falla:
+            raise ServicioNoDisponible(self.falla)
+        _validar_referencia(referencia)
+        ahora = self.reloj()
+        if vence_en <= ahora:
+            raise DatosInvalidos("La bóveda rechazó la declaración: la convocatoria vence en el pasado.")
+        if vence_en > ahora + dt.timedelta(days=TOPE_DECLARACION_DIAS):
+            raise DatosInvalidos("La bóveda rechazó la declaración: una convocatoria no puede "
+                                 "declararse por más de 60 días.")
+        if not self._consiente(id_persona):
+            raise ConvocatoriaRechazada(
+                f"La bóveda no aceptó la convocatoria: la persona {id_persona} no tiene "
+                "consentimiento vigente de contacto_participacion, o ya no está activa.")
+        self.declaraciones[(str(id_persona), str(referencia))] = vence_en
+        self.llamadas_declarar.append((str(id_persona), str(referencia), vence_en))
+
+    def tiene_declaracion(self, id_persona):
+        ahora = self.reloj()
+        return any(k[0] == str(id_persona) and v > ahora for k, v in self.declaraciones.items())
+
     def contacto(self, id_persona, canal, actor_email, motivo="convocatoria coloquio"):
         _validar_canal(canal)
         _exigir_actor(actor_email)
+        if self.falla:
+            raise ServicioNoDisponible(self.falla)
         p = self.personas.get(str(id_persona))
         if not p or not p.get("consiente", True):
             raise ContactoRechazado(
                 f"La bóveda no entregó el contacto: la persona {id_persona} no "
                 "tiene consentimiento vigente de contacto_participacion, o ya no "
                 "está activa.", {"canal": canal})
-        if self.exigir_convocatoria_activa and str(id_persona) not in self.convocatorias_activas:
+        if self.exigir_convocatoria_activa and not self.tiene_declaracion(id_persona):
             raise ContactoRechazado(
                 f"La bóveda no entregó el contacto: la persona {id_persona} no "
-                "tiene una convocatoria activa: no hay motivo para leer su contacto.",
-                {"canal": canal})
+                "tiene una convocatoria activa en el sistema «coloquio»: no hay "
+                "motivo para leer su contacto.", {"canal": canal})
         self.auditoria.append({"idPersona": str(id_persona), "actor": actor_email,
                                "canal": canal, "motivo": motivo, "sistema": "coloquio"})
         return p.get(canal) or ""
@@ -348,6 +420,8 @@ class BovedaMemoria(Boveda):
     def dar_de_baja(self, id_persona, alcance="total"):
         """Lo que haría `paneles` al procesar una baja."""
         self.personas.pop(str(id_persona), None)
+        # La FK con `on delete cascade` de la `0016` se lleva las declaraciones.
+        self.declaraciones = {k: v for k, v in self.declaraciones.items() if k[0] != str(id_persona)}
         self.pendientes[(str(id_persona), alcance)] = {"intentos": 0, "ultimoError": None}
 
     def borrados_pendientes(self):

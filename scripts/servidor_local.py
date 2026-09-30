@@ -158,6 +158,8 @@ def main():
     args = p.parse_args()
     ctx = fabrica.armar_contexto()
     ctx.reloj = lambda: dt.datetime.now(dt.timezone.utc)
+    # La bóveda de prueba vence las declaraciones de convocatoria con el mismo reloj.
+    ctx.bov.reloj = ctx.reloj
     ctx.padron = {k: {"nombre": v["nombre"], "email": v["email"], "rol": v["rol"]} for k, v in USUARIOS.items()}
     # Los roles de los usuarios de prueba, como si un administrador los hubiera asignado.
     for uid, u in USUARIOS.items():

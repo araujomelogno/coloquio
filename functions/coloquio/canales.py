@@ -12,12 +12,21 @@ Una interfaz, dos implementaciones:
 El dato de contacto se obtiene con `contacto_para_convocatoria()` en el
 momento de usarlo, con el email del usuario como `p_actor`, y **no se
 persiste**: no va al evento del embudo, ni al documento, ni a un log (R1.12).
+
+Desde R5.2.a la bóveda exige además una convocatoria **declarada**
+(`declaracion.py`). Se declara al invitar. Si al leer el contacto la bóveda
+lo rechaza —la declaración venció porque la sesión se corrió, o la invitación
+es anterior a R5.2.a—, se vuelve a declarar y se reintenta **una vez**. Si la
+causa es el consentimiento, la declaración también falla y ese es el error
+que se muestra.
 """
 
 import datetime as dt
 
-from . import configuracion, embudo, estudios, modelo, sesiones, util, whatsapp
-from .errores import Conflicto, DatosInvalidos, NoEncontrado, SinPermiso
+from . import configuracion, declaracion, embudo, estudios, modelo, sesiones, util, whatsapp
+from .errores import (
+    Conflicto, ContactoRechazado, DatosInvalidos, ErrorApi, NoEncontrado, SinPermiso,
+)
 
 MOTIVO_AUDITORIA = "convocatoria coloquio"
 
@@ -50,6 +59,15 @@ def guion_para(store, sesion, estudio, id_persona):
         return texto
 
 
+def leer_contacto(ctx, sesion_id, sesion, id_persona, canal, actor_email):
+    """El contacto, con la declaración repuesta una vez si hace falta."""
+    try:
+        return ctx.boveda.contacto(id_persona, canal, actor_email, MOTIVO_AUDITORIA)
+    except ContactoRechazado:
+        declaracion.declarar(ctx, sesion_id, sesion, id_persona)
+        return ctx.boveda.contacto(id_persona, canal, actor_email, MOTIVO_AUDITORIA)
+
+
 def contacto(ctx, actor, sesion_id, id_persona, canal):
     """GET contacto puntual (auditado en la bóveda). No se guarda nada."""
     id_persona = util.validar_id_persona(id_persona)
@@ -64,8 +82,11 @@ def contacto(ctx, actor, sesion_id, id_persona, canal):
         raise NoEncontrado("Esa persona no está en el embudo de esta sesión.")
     if conv["estado"] in modelo.TERMINALES:
         raise Conflicto("Esa convocatoria está cerrada: no hay motivo para leer su contacto.")
+    if conv["estado"] not in declaracion.EN_CURSO:
+        raise Conflicto("Todavía no está invitado: invitalo primero. El contacto se lee "
+                        "para convocar, y la convocatoria empieza con la invitación.")
     estudio = ctx.store.get(f"estudio/{sesion['estudioId']}") or {}
-    dato = ctx.boveda.contacto(id_persona, canal, actor.email, MOTIVO_AUDITORIA)
+    dato = leer_contacto(ctx, sesion_id, sesion, id_persona, canal, actor.email)
     return {
         "canal": canal,
         "dato": dato,
@@ -126,10 +147,15 @@ def enviar_whatsapp(ctx, actor, sesion_id, id_persona, cuerpo):
     v = variables_guion(ctx.store, sesion, estudio, id_persona)
     si, no = whatsapp.payload(sesion_id, id_persona, "si"), whatsapp.payload(sesion_id, id_persona, "no")
 
+    # La invitación por WhatsApp es la invitación: se declara antes de leer el
+    # celular (R5.2.a). Si la bóveda la rechaza no se envía nada.
+    if conv["estado"] == modelo.CANDIDATO:
+        declaracion.declarar(ctx, sesion_id, sesion, id_persona)
+
     # Fuera de la transacción: el envío es un efecto externo y la transacción
     # se puede reintentar. El celular vive solo en esta variable local.
     try:
-        celular = ctx.boveda.contacto(id_persona, "celular", actor.email, MOTIVO_AUDITORIA)
+        celular = leer_contacto(ctx, sesion_id, sesion, id_persona, "celular", actor.email)
         if tipo != "invitacion" and en_ventana:
             texto = {
                 "recordatorio": (f"Te recordamos el encuentro del {v['fecha']} en {v['lugar']}. "
@@ -154,8 +180,6 @@ def enviar_whatsapp(ctx, actor, sesion_id, id_persona, cuerpo):
         conv2 = _degradar(ctx, sesion_id, id_persona, str(error))
         return {"enviado": False, "degradado": True, "motivo": str(error), "convocatoria": conv2}
     except Exception as error:  # noqa: BLE001 — contacto rechazado u otro
-        from .errores import ErrorApi
-
         if isinstance(error, ErrorApi):
             conv2 = _degradar(ctx, sesion_id, id_persona, error.mensaje)
             return {"enviado": False, "degradado": True, "motivo": error.mensaje,

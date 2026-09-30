@@ -76,6 +76,18 @@ class ContactoRechazado(ErrorApi):
     codigo = "contacto_rechazado"
 
 
+class ConvocatoriaRechazada(ErrorApi):
+    """La bóveda no aceptó declarar la convocatoria (R5.2.a).
+
+    Casi siempre es que la persona no tiene consentimiento vigente de
+    contacto: la función reaplica el gate. Sin declaración no hay contacto,
+    así que la persona no se puede invitar.
+    """
+
+    status = 403
+    codigo = "convocatoria_rechazada"
+
+
 class FugaDePII(ErrorApi):
     """R1.12: se intentó escribir PII en el store de COLOQUIO."""
 

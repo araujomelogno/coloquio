@@ -463,9 +463,14 @@ def test_boveda_solo_superficie_fase5():
     clase = fuente[fuente.index("class BovedaPostgres"):fuente.index("class BovedaMemoria")]
     sql = " ".join(re.findall(r'"([^"]*)"', clase)).lower()
     permitidos = {"v_persona_convocable", "contacto_para_convocatoria", "mis_borrados_pendientes",
+                  "declarar_convocatoria",
                   "confirmar_borrado", "reportar_error_de_borrado", "sistema_de_la_conexion"}
     for palabra in re.findall(r"\bfrom\s+([a-z_]+)", sql):
         assert palabra in permitidos, palabra
+    # Y toda función que se ejecute es de la superficie (R5.2.a suma una).
+    llamadas = set(re.findall(r"\bselect\s+([a-z_]+)\(", sql))
+    assert "declarar_convocatoria" in llamadas
+    assert llamadas <= permitidos, llamadas - permitidos
     for prohibido in ("insert ", "update ", "delete ", " persona ", "consentimiento ", "participacion "):
         assert prohibido not in sql, prohibido
 
@@ -473,15 +478,6 @@ def test_boveda_solo_superficie_fase5():
 def test_contacto_exige_actor_humano(ctx):
     with pytest.raises(Exception, match="email del usuario"):
         ctx.bov.contacto(fabrica.id_de(1), "celular", None)
-
-
-def test_rechazo_por_convocatoria_activa_se_informa(api, ctx, sesion):
-    """La `0014` hoy exige una convocatoria activa en `paneles` (ver docs)."""
-    sid = sesion["id"]
-    propuesta = _llenar_sesion(api, sid)
-    ctx.bov.exigir_convocatoria_activa = True
-    with pytest.raises(ContactoRechazado, match="convocatoria activa"):
-        api("GET", f"/cuali/convocatorias/{sid}/{propuesta['propuestos'][0]}/contacto")
 
 
 def test_ahora_fijo(ctx):

@@ -13,9 +13,14 @@ hecho así: leerlo antes de revertir algo) y `docs/manual/` (manual de usuario e
   **toda** escritura pasa por `pii.validar_sin_pii()`. No agregar caminos de escritura
   que no pasen por `Store`. No hay notas libres sobre personas.
 - **La bóveda solo por la superficie de la Fase 5.** `v_persona_convocable` (el gate de
-  consentimiento es la vista, no un `if`), `contacto_para_convocatoria()` y las tres
-  funciones de la cascada. Nada de `persona`, `consentimiento`, `participacion`. Cero
-  escrituras. `test_boveda_solo_superficie_fase5` lo controla.
+  consentimiento es la vista, no un `if`), `declarar_convocatoria()`,
+  `contacto_para_convocatoria()` y las tres funciones de la cascada. Nada de `persona`,
+  `consentimiento`, `participacion`. La única escritura es `declarar_convocatoria()`.
+  `test_boveda_solo_superficie_fase5` lo controla.
+- **Invitar es declarar (R5.2.a).** Todo paso que deja a alguien invitado (lista de
+  invitación, fila, reemplazo, WhatsApp, reingreso) y toda reprogramación pasa por
+  `coloquio/declaracion.py`, **fuera de la transacción de Firestore y antes**. Sin
+  declaración la bóveda no entrega el contacto.
 - **`p_actor` es siempre el email del usuario humano** que pidió el contacto.
 - **El dato de contacto se usa y se descarta**: no se guarda, no se loguea, no va al evento.
 - **Nunca se confirma un borrado que no ocurrió** (`cascada.py` verifica antes de confirmar).

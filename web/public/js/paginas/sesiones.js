@@ -152,7 +152,15 @@ export async function armado(id) {
   const g = $('#guardar');
   if (g) g.onclick = async () => {
     g.disabled = true;
-    try { await api.sesiones.editar(id, leerSesion(form)); toast('Sesión actualizada.', 'ok'); armado(id); } catch (e) { error(e); g.disabled = false; }
+    try {
+      const r = await api.sesiones.editar(id, leerSesion(form));
+      toast('Sesión actualizada.', 'ok');
+      // Reprogramar vuelve a declarar la convocatoria en la bóveda con la fecha nueva (R5.2.a).
+      const d = r.redeclaracion;
+      if (d?.error) toast(`La fecha cambió, pero no se pudo actualizar la convocatoria en la bóveda: ${d.error}. Se repone sola al leer cada contacto.`, 'err');
+      else if (d?.rechazados?.length) toast(`${d.rechazados.length} convocado(s) ya no tienen consentimiento vigente: la bóveda no aceptó la fecha nueva.`, 'err');
+      armado(id);
+    } catch (e) { error(e); g.disabled = false; }
   };
   const c = $('#cancelar');
   if (c) c.onclick = () => cancelar(id);
