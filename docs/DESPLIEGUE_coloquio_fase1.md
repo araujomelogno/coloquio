@@ -33,6 +33,9 @@ historia del cambio está en
 [`PROPUESTA_paneles_contacto_coloquio.md`](PROPUESTA_paneles_contacto_coloquio.md),
 y cómo lo hace COLOQUIO, en `docs/decisiones.md` (D44, D46 y D47).
 
+> **¿La Fase 1 ya estaba desplegada?** Para actualizarla a R5.2.a alcanza con
+> [`DESPLIEGUE_R5.2.a.md`](DESPLIEGUE_R5.2.a.md): no hay configuración nueva.
+
 ---
 
 ## 1 · Chequeos previos

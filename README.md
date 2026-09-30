@@ -12,7 +12,7 @@ participación propio, incentivos y cascada de baja.
 - Relación con `paneles`: [`docs/HANDOFF_coloquio_fase1.md`](docs/HANDOFF_coloquio_fase1.md)
 - **Manual de usuario:** [`docs/manual/Manual_de_usuario.pdf`](docs/manual/Manual_de_usuario.pdf)
 - Decisiones de diseño: [`docs/decisiones.md`](docs/decisiones.md)
-- **Despliegue:** [`docs/DESPLIEGUE_coloquio_fase1.md`](docs/DESPLIEGUE_coloquio_fase1.md)
+- **Despliegue:** [`docs/DESPLIEGUE_coloquio_fase1.md`](docs/DESPLIEGUE_coloquio_fase1.md); si la Fase 1 ya está desplegada, la actualización R5.2.a en [`docs/DESPLIEGUE_R5.2.a.md`](docs/DESPLIEGUE_R5.2.a.md)
 - Convocatoria declarada en la bóveda (R5.2.a, resuelto): [`docs/PROPUESTA_paneles_contacto_coloquio.md`](docs/PROPUESTA_paneles_contacto_coloquio.md)
 
 ## Probarlo en local
