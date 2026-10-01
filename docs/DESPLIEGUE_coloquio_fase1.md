@@ -52,15 +52,57 @@ psql "$DSN_BOVEDA" -c "select has_function_privilege('coloquio_app',
   'declarar_convocatoria(uuid, text, timestamptz)', 'execute');"
 #   t
 
-# 1.3 La batería, conectada como coloquio (paneles/docs/DESPLIEGUE - R5.2.a convocatoria externa.md)
-python3 scripts/verificar_coloquio.py          # en el repo paneles
-#   16 chequeos; los dos de R5.2.a en verde. Contra Cloud SQL, los dos rojos
-#   conocidos de la Fase 0 (p_actor en el test y rol sin credenciales) siguen igual.
+# 1.3 La batería de paneles, conectada como coloquio, en modo solo lectura (ver abajo)
 
 # 1.4 Ubicación de la base Firestore por defecto (es INMUTABLE: confirmar antes de crear nada)
 gcloud firestore databases describe --database='(default)' --format='value(locationId)'
 #   southamerica-east1
 ```
+
+### 1.3 · La batería de `paneles`, vista desde COLOQUIO
+
+`verificar_coloquio.py` **no está en este repo, está en el de `paneles`**
+(`araujomelogno/paneles`, `scripts/verificar_coloquio.py`). Se conecta a la
+bóveda como `coloquio_app` y compara sus privilegios efectivos con la lista
+blanca de lo que COLOQUIO puede tocar.
+
+> ⚠️ **Contra producción, siempre con `--solo-lectura`.** Sin esa opción, el
+> script arma un escenario de prueba (personas, consentimientos, una
+> convocatoria) con la conexión del dueño y **escribe en la bóveda**. La
+> corrida completa la hace `paneles` en su despliegue (paso 6 de
+> `docs/DESPLIEGUE - R5.2.a convocatoria externa.md`) o contra su cluster
+> de pruebas.
+
+Hace falta el Auth Proxy abierto hacia la instancia y dos DSN: el del dueño
+(lo pide el script aun en solo lectura) y el de la cuenta de servicio de
+COLOQUIO, con un token IAM generado impersonándola.
+
+```bash
+git clone https://github.com/araujomelogno/paneles.git && cd paneles
+pip install "psycopg[binary]"
+
+# en otra terminal, el Auth Proxy hacia la bóveda
+cloud-sql-proxy gestion-paneles:southamerica-east1:paneles-boveda --port 5432
+
+export DSN_BOVEDA="$(scripts/dsn_local.sh boveda)"            # dueño
+TOKEN_COLOQUIO="$(gcloud sql generate-login-token \
+  --impersonate-service-account=coloquio-app@gestion-paneles.iam.gserviceaccount.com)"
+export DSN_BOVEDA_COLOQUIO="postgresql://coloquio-app%40gestion-paneles.iam:${TOKEN_COLOQUIO}@127.0.0.1:5432/paneles_boveda?sslmode=disable"
+
+python3 scripts/verificar_coloquio.py --solo-lectura
+#   Pasaron los 7 chequeos. La bóveda se defiende sola.
+#   (avisa que se saltean 9 que necesitan escenario: es lo esperado)
+```
+
+Lo que importa de los 7: **«privilegios efectivos sobre funciones»** tiene
+que dar «7 funciones ejecutables, todas en la lista», con
+`declarar_convocatoria` entre ellas. Los dos rojos conocidos de la Fase 0
+contra Cloud SQL (el test de `p_actor` y el rol sin credenciales) son de
+chequeos con escenario, así que en solo lectura no aparecen.
+
+Si no hay acceso al repo de `paneles`, el chequeo 1.2 cubre lo indispensable
+para esta versión. La batería agrega la garantía de que no hay **privilegios
+de más**.
 
 Si 1.4 no da `southamerica-east1`, **parar** y decidir con el equipo: la base
 de COLOQUIO va igual en `southamerica-east1` (es la región de la bóveda y de las
@@ -289,7 +331,7 @@ select actor_uid, sistema from reidentificacion where id_persona = '<id>' order 
 | 8 | Cierre: participación, incentivos, historial | Recepción → Cerrar sesión; Incentivos; historial de un presente |
 | 9 | Baja de prueba en `paneles` → borrado y confirmación | Ver §10 |
 | 10 | Auditoría de PII del store | `python3 scripts/auditar_store.py` → 0 hallazgos |
-| 11 | Cero escrituras en la bóveda fuera de la superficie | `verificar_coloquio.py` (lista blanca) + `test_boveda_solo_superficie_fase5` |
+| 11 | Cero escrituras en la bóveda fuera de la superficie | `verificar_coloquio.py --solo-lectura`, del repo `paneles` (lista blanca, §1.3), + `test_boveda_solo_superficie_fase5` |
 
 ---
 
