@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Manual de usuario — COLOQUIO</title>
+<link rel="stylesheet" href="tipografia/montserrat.css" />
+<link rel="stylesheet" href="estilo.css" />
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm; }
+</style>
+</head>
+<body>
+
+
+<!-- ════════════════ ÍNDICE ════════════════ -->
+<div class="indice">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Contenido</div>
+    <h2>Contenido del manual</h2>
+  </div>
+
+  <div class="aviso info">
+    <div class="t">Sobre las imágenes de este manual</div>
+    <p>Las capturas son de la aplicación real, tomadas sobre un panel de ejemplo con
+    personas ficticias. Las pantallas son las mismas que en producción; cambian los
+    códigos, los segmentos y las cifras.</p>
+  </div>
+  <ol>
+    <li><a href="#s1"><span><span class="num">1</span> COLOQUIO en dos minutos</span></a>
+      <ul><li>Qué resuelve · Qué guarda y qué no · Quién puede hacer qué · El recorrido de una sesión</li></ul></li>
+    <li><a href="#s2"><span><span class="num">2</span> Entrar al sistema</span></a>
+      <ul><li>Ingreso · Roles · Cuentas sin habilitar · El tablero</li></ul></li>
+    <li><a href="#s3"><span><span class="num">3</span> Estudios y pauta</span></a>
+      <ul><li>Crear un estudio · Cargar la pauta · Versiones · El guion de convocatoria</li></ul></li>
+    <li><a href="#s4"><span><span class="num">4</span> Armar una sesión</span></a>
+      <ul><li>Fecha y lugar · Cupo y cuotas · Sobre-reclutamiento · Regalo por defecto</li></ul></li>
+    <li><a href="#s5"><span><span class="num">5</span> Seleccionar candidatos</span></a>
+      <ul><li>Demográfica, semántica o mixta · La evidencia · El historial · El filtro de fatiga · Anular con motivo · La lista de espera</li></ul></li>
+    <li><a href="#s6"><span><span class="num">6</span> Convocar: el embudo</span></a>
+      <ul><li>Los estados · La lista de invitación · Ver el contacto · Registrar con un clic · Intentos sin respuesta · Reingresar · Cupo alcanzado</li></ul></li>
+    <li><a href="#s7"><span><span class="num">7</span> Convocar por WhatsApp</span></a>
+      <ul><li>Elegir el canal · Invitación, confirmación y recordatorio · La ventana gratis · Cuando WhatsApp falla</li></ul></li>
+    <li><a href="#s8"><span><span class="num">8</span> Cuando alguien se cae</span></a>
+      <ul><li>Reemplazo del mismo segmento · Candidatos que rompen la cuota · Sin candidatos: las tres salidas · Bajas del panel</li></ul></li>
+    <li><a href="#s9"><span><span class="num">9</span> El día de la sesión: recepción</span></a>
+      <ul><li>El código de convocatoria · Marcar llegadas desde el teléfono · Alguien no confirmado · Cerrar la sesión</li></ul></li>
+    <li><a href="#s10"><span><span class="num">10</span> Incentivos</span></a>
+      <ul><li>Compromiso y entrega · Cambiar el regalo · Totales por sesión y por estudio · Cancelar una sesión</li></ul></li>
+    <li><a href="#s11"><span><span class="num">11</span> Tablero y métricas</span></a>
+      <ul><li>Tasa de show · Ratio necesario · Intentos por confirmación · Bloqueos por fatiga</li></ul></li>
+    <li><a href="#s12"><span><span class="num">12</span> Configuración</span></a>
+      <ul><li>Umbrales de fatiga · Categorías · Regalos · Guion · Plantillas de WhatsApp · Sesiones históricas · Roles</li></ul></li>
+    <li><a href="#s13"><span><span class="num">13</span> Cumplimiento</span></a>
+      <ul><li>La cascada de baja · Verificar y reparar</li></ul></li>
+    <li><a href="#s14"><span><span class="num">14</span> Preguntas frecuentes</span></a></li>
+    <li><a href="#s15"><span><span class="num">15</span> Glosario</span></a></li>
+  </ol>
+</div>
+
+
+<!-- ════════════════ 1 ════════════════ -->
+<section id="s1">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 1</div>
+    <h2>COLOQUIO en dos minutos</h2>
+    <p>Qué resuelve, qué datos guarda y cuáles no, y qué puede hacer cada rol.</p>
+  </div>
+
+  <p>COLOQUIO es el sistema de <strong>investigación cualitativa</strong> de Equipos
+  Consultores: entrevistas en profundidad y focus groups. En esta primera fase
+  permite correr un grupo presencial entero desde el sistema. Se define el estudio
+  y su pauta, se eligen los candidatos del panel y se los convoca. Si alguien se
+  cae, se lo reemplaza sin romper la composición del grupo. El día de la sesión se
+  recibe a la gente, y al final queda registrado el regalo de cada participante.</p>
+
+  <p>Hasta ahora ese trabajo se hacía con una agenda y WhatsApp, y dejaba tres
+  problemas. No se podía medir cuánta gente venía. Nada impedía sentar por tercera
+  vez en el año a la misma persona. Y el volumen de cualitativo quedaba limitado por
+  las horas de coordinación. COLOQUIO registra cada paso para que esos números
+  existan, y bloquea al panelista repetido cuando se arma el grupo.</p>
+
+  <h3><span class="n">1.1</span> Qué guarda COLOQUIO, y qué no</h3>
+
+  <p>COLOQUIO trabaja sobre el <strong>mismo panel</strong> que Gestión de paneles,
+  pero <strong>no guarda ningún dato personal</strong>: ni nombre, ni documento, ni
+  teléfono, ni email, ni dirección, ni fecha de nacimiento. A cada persona la
+  identifica un código opaco, el <code>id_persona</code>, y su
+  <strong>segmento</strong>: sexo, tramo etario y localidad.</p>
+
+  <table>
+    <tr><td class="destacado">La bóveda</td>
+      <td>Es la base de datos de personas de <code>paneles</code>. COLOQUIO la
+      consulta para saber <strong>quién se puede convocar</strong> (solo aparece
+      quien dio su consentimiento de contacto) y para leer un teléfono o un email
+      <strong>en el momento de usarlo</strong>. Cada lectura de un contacto queda
+      registrada a nombre de quien la pidió.</td></tr>
+    <tr><td class="destacado">COLOQUIO</td>
+      <td>Guarda estudios, pautas, sesiones, el embudo de cada convocatoria,
+      asistencias, incentivos y el historial cualitativo de cada persona. Todo por
+      código, sin datos personales.</td></tr>
+  </table>
+
+  <div class="aviso">
+    <div class="t">La consecuencia práctica</div>
+    <p>En COLOQUIO vas a ver <strong>códigos</strong>, no nombres. El teléfono se
+    muestra cuando lo pedís para llamar y no queda guardado: no lo copies a una
+    planilla ni a una nota. Y en los campos de texto libre, como las notas de la
+    sesión o los motivos, <strong>no se pueden escribir</strong> teléfonos, emails
+    ni documentos. El sistema los rechaza.</p>
+  </div>
+
+  <h3><span class="n">1.2</span> Quién puede hacer qué</h3>
+  <p>Los usuarios son los mismos de Gestión de paneles. Cada uno puede tener uno o
+  más de estos roles:</p>
+  <table>
+    <tr><th>Rol</th><th>Qué hace</th></tr>
+    <tr><td class="destacado">Coordinador de campo</td><td>Arma sesiones, selecciona, convoca, reemplaza, recibe a la gente, cierra la sesión y entrega los regalos.</td></tr>
+    <tr><td class="destacado">Investigador</td><td>Crea estudios y pautas, arma sesiones, selecciona candidatos, consulta historiales e importa sesiones históricas.</td></tr>
+    <tr><td class="destacado">Administrador</td><td>Todo lo anterior, y además los catálogos, los umbrales, los roles de los usuarios y las tareas de cumplimiento.</td></tr>
+  </table>
+  <p>Quien es <strong>admin en Gestión de paneles</strong> es administrador de
+  COLOQUIO automáticamente. Así siempre hay alguien que pueda asignar los primeros
+  roles.</p>
+
+  <h3><span class="n">1.3</span> El recorrido de una sesión</h3>
+  <ol class="pasos">
+    <li><strong>Estudio y pauta</strong> (sección 3). La pauta es el instrumento: sin ella no se puede abrir una sesión.</li>
+    <li><strong>Sesión</strong> (sección 4): fecha, lugar, cuántos querés sentar y de qué segmentos.</li>
+    <li><strong>Selección</strong> (sección 5): a quién llamar, con el historial de cada candidato a la vista.</li>
+    <li><strong>Convocatoria</strong> (secciones 6 y 7): invitar, registrar respuestas y confirmar, por teléfono o por WhatsApp.</li>
+    <li><strong>Reemplazos</strong> (sección 8): si alguien se cae, el sistema propone a otra persona del mismo segmento.</li>
+    <li><strong>Recepción y cierre</strong> (sección 9): marcar llegadas desde el teléfono y cerrar.</li>
+    <li><strong>Incentivos</strong> (sección 10): registrar la entrega de cada regalo.</li>
+  </ol>
+</section>
+
+
+<!-- ════════════════ 2 ════════════════ -->
+<section id="s2">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 2</div>
+    <h2>Entrar al sistema</h2>
+    <p>Se entra con el mismo usuario de Gestión de paneles.</p>
+  </div>
+
+  <ol class="pasos">
+    <li>Abrí la dirección de COLOQUIO en el navegador.</li>
+    <li>Escribí tu email y tu contraseña de Equipos, y tocá <strong>Ingresar</strong>.</li>
+    <li>Si no recordás la contraseña, escribí tu email y tocá <strong>¿Olvidaste tu contraseña?</strong>. Te llega un correo para cambiarla.</li>
+  </ol>
+  <figure><img class="recorte" src="capturas/01-ingreso.jpg" />
+    <figcaption><b>Ingreso.</b> El usuario y la contraseña son los mismos de Gestión de paneles.</figcaption></figure>
+
+  <h3><span class="n">2.1</span> Si no podés entrar</h3>
+  <table>
+    <tr><th>Mensaje</th><th>Qué significa</th></tr>
+    <tr><td class="destacado">No estás habilitado en el padrón de Equipos</td><td>Tu usuario no existe o está desactivado en Gestión de paneles. Pedile el alta a un administrador de <code>paneles</code>.</td></tr>
+    <tr><td class="destacado">No tenés roles en COLOQUIO</td><td>Estás en el padrón pero nadie te asignó un rol acá. Pedíselo a un administrador de COLOQUIO (sección 12.7).</td></tr>
+  </table>
+
+  <h3><span class="n">2.2</span> El tablero</h3>
+  <p>Es la primera pantalla. Muestra las sesiones de los próximos siete días, las que
+  están en convocatoria y, cuando haya sesiones cerradas, la tasa de show y su
+  tendencia (sección 11). A la izquierda está el menú: <strong>Tablero</strong>,
+  <strong>Estudios</strong>, <strong>Sesiones</strong> y
+  <strong>Configuración</strong>. Cuando entrás a una sesión aparecen debajo sus
+  cinco pantallas: Armado, Selección, Embudo, Recepción e Incentivos.</p>
+  <figure><img class="recorte" src="capturas/02-tablero-inicio.jpg" />
+    <figcaption><b>Tablero al empezar.</b> Todavía no hay sesiones cerradas, así que no hay tasa de show.</figcaption></figure>
+</section>
+
+
+<!-- ════════════════ 3 ════════════════ -->
+<section id="s3">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 3</div>
+    <h2>Estudios y pauta</h2>
+    <p>El estudio agrupa las sesiones. La pauta es el instrumento con el que se conducen.</p>
+  </div>
+
+  <figure><img class="recorte" src="capturas/03-estudios.jpg" />
+    <figcaption><b>Estudios.</b> Cada fila muestra la categoría, la versión de la pauta y el valor comprometido en regalos.</figcaption></figure>
+
+  <h3><span class="n">3.1</span> Crear un estudio</h3>
+  <ol class="pasos">
+    <li>En <strong>Estudios</strong>, tocá <strong>+ Nuevo estudio</strong>.</li>
+    <li>Completá el nombre, el cliente y la <strong>categoría</strong> (bebidas, banca, política…). La categoría importa: el filtro de fatiga compara participaciones de la misma categoría.</li>
+    <li>En <strong>Tema</strong> escribí de qué se va a conversar. Se usa en el guion y en los mensajes de invitación.</li>
+    <li>Si el estudio es <strong>mixto</strong> (tiene también una encuesta en Gestión de paneles), pegá el <code>refEstudio</code> de esa encuesta. Si lo dejás vacío, el sistema genera uno.</li>
+  </ol>
+  <figure><img class="recorte media" src="capturas/04-estudio-nuevo.jpg" />
+    <figcaption><b>Nuevo estudio.</b></figcaption></figure>
+
+  <p>Un estudio recién creado no tiene pauta, y hasta que la tenga
+  <strong>no se puede abrir una sesión</strong>: el botón <strong>+ Nueva
+  sesión</strong> aparece deshabilitado.</p>
+  <figure><img class="recorte" src="capturas/05-estudio-sin-pauta.jpg" />
+    <figcaption><b>Estudio sin pauta.</b> El aviso explica por qué no se pueden crear sesiones todavía.</figcaption></figure>
+
+  <h3><span class="n">3.2</span> Cargar la pauta</h3>
+  <ol class="pasos">
+    <li>En la ficha del estudio, tocá <strong>Cargar pauta</strong>.</li>
+    <li>Cada tópico lleva un título, los minutos estimados, el objetivo (qué se quiere saber) y las repreguntas previstas, una por línea.</li>
+    <li>Agregá tópicos con <strong>+ Tópico</strong> y quitá los que sobran con la ✕. Abajo se ve el total de minutos.</li>
+    <li>Tocá <strong>Guardar versión</strong>.</li>
+  </ol>
+  <figure><img class="recorte" src="capturas/06-pauta-editor.jpg" />
+    <figcaption><b>Editor de pauta.</b> Los tópicos quedan en el orden en que aparecen.</figcaption></figure>
+
+  <div class="aviso info">
+    <div class="t">La pauta tiene versiones</div>
+    <p>Cada vez que la guardás se crea una <strong>versión nueva</strong> y la
+    anterior queda inactiva. Las sesiones que ya estaban abiertas siguen atadas a
+    la versión con la que se crearon. Así, cambiar la pauta a mitad del campo no
+    altera lo que ya se hizo.</p>
+  </div>
+
+  <figure><img class="recorte" src="capturas/07-estudio-ficha.jpg" />
+    <figcaption><b>Ficha del estudio.</b> La pauta activa, las sesiones, el total comprometido en regalos y el guion.</figcaption></figure>
+
+  <h3><span class="n">3.3</span> El guion de convocatoria</h3>
+  <p>Es el texto que el sistema te sugiere para llamar o escribir. Cada estudio puede
+  tener el suyo. Si no, se usa el general de Configuración. Admite variables que se
+  completan solas: <code>{tema}</code>, <code>{fecha}</code>, <code>{lugar}</code>,
+  <code>{duracion}</code>, <code>{incentivo}</code> y <code>{codigo}</code>. El
+  <strong>código</strong> es importante: es lo que la persona tiene que decir al
+  llegar (sección 9).</p>
+</section>
+
+
+<!-- ════════════════ 4 ════════════════ -->
+<section id="s4">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 4</div>
+    <h2>Armar una sesión</h2>
+    <p>Cuántos querés sentar, de qué segmentos, y a cuántos hay que invitar para lograrlo.</p>
+  </div>
+
+  <ol class="pasos">
+    <li>En la ficha del estudio, tocá <strong>+ Nueva sesión</strong>.</li>
+    <li>Completá el nombre, el tipo (focus group o entrevista en profundidad), la fecha y la hora, y el lugar. En esta fase todas las sesiones son presenciales.</li>
+    <li>Indicá el <strong>cupo objetivo</strong>: cuántas personas querés sentadas.</li>
+    <li>Indicá el <strong>ratio de sobre-reclutamiento</strong>. Con cupo 8 y ratio 1,5, el sistema apunta a invitar a 12. Debajo del campo se ve el supuesto: con ratio 1,5 se asume que se cae un 33 %.</li>
+    <li>Cargá las <strong>cuotas de composición</strong>: por cada dimensión (sexo, tramo etario, localidad), cuántas personas de cada categoría querés sentadas. Las cuotas de una dimensión no pueden sumar más que el cupo.</li>
+    <li>Elegí el <strong>regalo por defecto</strong>, el que se compromete cuando alguien llega.</li>
+    <li>Tocá <strong>Crear sesión</strong>. El sistema te lleva a Selección.</li>
+  </ol>
+  <figure><img class="recorte" src="capturas/08-sesion-nueva.jpg" />
+    <figcaption><b>Nueva sesión.</b> El supuesto de caída se recalcula al cambiar cupo o ratio.</figcaption></figure>
+
+  <p>Todo esto se puede cambiar después desde la pestaña <strong>Armado</strong>,
+  mientras la sesión esté abierta. Ahí quedan también las decisiones de cuota que se
+  vayan tomando (sección 8) y la opción de <strong>cancelar</strong> la sesión
+  (sección 10.4).</p>
+  <figure><img class="recorte" src="capturas/09-sesion-armado.jpg" />
+    <figcaption><b>Armado.</b></figcaption></figure>
+</section>
+
+
+<!-- ════════════════ 5 ════════════════ -->
+<section id="s5">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 5</div>
+    <h2>Seleccionar candidatos</h2>
+    <p>A quién llamar, y por qué: el panel decide, con el historial de cada persona a la vista.</p>
+  </div>
+
+  <h3><span class="n">5.1</span> Los tres modos</h3>
+  <table>
+    <tr><td class="destacado">Demográfica</td><td>Por sexo, tramo etario, localidad y edad. Es la más rápida y no usa el motor semántico.</td></tr>
+    <tr><td class="destacado">Semántica</td><td>Por <strong>lo que la gente respondió</strong> en encuestas anteriores: «toma cerveza artesanal con amigos». Usa el motor de consulta de Gestión de paneles y ordena a las personas por cuánto se parece lo que dijeron.</td></tr>
+    <tr><td class="destacado">Mixta</td><td>Las dos cosas: filtra por segmento y ordena por lo que respondieron.</td></tr>
+  </table>
+  <ol class="pasos">
+    <li>En la pestaña <strong>Selección</strong>, elegí el modo arriba a la derecha.</li>
+    <li>Marcá los filtros demográficos. En semántica o mixta, escribí uno o más criterios, uno por línea.</li>
+    <li>Tocá <strong>Buscar candidatos</strong>.</li>
+  </ol>
+  <figure><img class="recorte" src="capturas/10-seleccion-consulta.jpg" />
+    <figcaption><b>Consulta mixta.</b> Mujeres y hombres de 25 a 44 que hablaron de cerveza artesanal.</figcaption></figure>
+
+  <div class="aviso ok">
+    <div class="t">Nadie sin consentimiento aparece</div>
+    <p>La lista sale de la bóveda, que muestra solo a quien tiene vigente el
+    consentimiento de contacto. No es un filtro de COLOQUIO que se pueda saltear:
+    si alguien retiró el consentimiento, directamente no está.</p>
+  </div>
+
+  <h3><span class="n">5.2</span> Leer los resultados</h3>
+  <p>Cada candidato aparece con:</p>
+  <ul class="puntos">
+    <li>su <strong>código</strong> y su <strong>segmento</strong>;</li>
+    <li>en semántica o mixta, su <strong>posición en el ranking</strong> y la
+    <strong>evidencia</strong>: la respuesta que lo trajo, de qué estudio y a qué
+    pregunta. Así podés defender la selección ante el cliente;</li>
+    <li>su <strong>historial cualitativo</strong> (🗂): cuántas veces participó y
+    cuándo fue la última. Si tocás el chip, ves el detalle.</li>
+  </ul>
+  <figure><img class="recorte" src="capturas/11-seleccion-mixta.jpg" />
+    <figcaption><b>Resultados de una consulta mixta.</b> A la derecha, el estado de la cuota de la sesión.</figcaption></figure>
+
+  <div class="aviso">
+    <div class="t">Si el ranking semántico no está disponible</div>
+    <p>Si el motor de Gestión de paneles no responde, o si no encuentra contenido para
+    ese segmento, la selección <strong>no se detiene</strong>: se resuelve por
+    criterio demográfico y un cartel amarillo explica por qué. Para usar la búsqueda
+    semántica, tu usuario tiene que tener además permiso de consulta en Gestión de
+    paneles.</p>
+  </div>
+
+  <h3><span class="n">5.3</span> El filtro anti-panelista-profesional</h3>
+  <p>El sistema <strong>excluye solo</strong> a quien participó de una sesión de la
+  misma categoría dentro de la ventana configurada (por ejemplo, 180 días), y a quien
+  llegó al tope global de participaciones del año. Los excluidos se muestran aparte,
+  con el motivo.</p>
+  <figure><img class="recorte" src="capturas/12-seleccion-excluidos.jpg" />
+    <figcaption><b>Excluidos por fatiga.</b> Cada uno con la regla que lo dejó afuera.</figcaption></figure>
+  <figure><img class="recorte media" src="capturas/13-historial.jpg" />
+    <figcaption><b>Historial cualitativo de una persona.</b> Estudios, categorías y fechas. Las sesiones cargadas a mano figuran como «importada».</figcaption></figure>
+
+  <h3><span class="n">5.4</span> Agregar candidatos a la lista de espera</h3>
+  <ol class="pasos">
+    <li>Marcá a los candidatos que querés, o tocá <strong>Seleccionar todos</strong>.</li>
+    <li>Tocá <strong>Agregar a la lista de espera</strong>. Quedan en la sesión como <span class="estado e-gris">Candidato</span>: todavía no se los llamó.</li>
+  </ol>
+  <p>Quien ya está en <strong>otra sesión del mismo estudio</strong> aparece marcado y
+  no se puede agregar: una persona no puede estar en dos sesiones de un mismo
+  estudio.</p>
+
+  <h4>Saltar el filtro de fatiga</h4>
+  <p>A veces hay que volver a sentar a alguien, por ejemplo por un perfil muy difícil
+  de conseguir. Se puede, pero <strong>no en silencio</strong>. Si marcás a un
+  excluido, el sistema te pide un motivo. El motivo queda registrado en su
+  convocatoria, con tu usuario y la hora.</p>
+  <figure><img class="recorte media" src="capturas/14-anulacion-fatiga.jpg" />
+    <figcaption><b>Anulación del filtro de fatiga.</b> El motivo es obligatorio.</figcaption></figure>
+
+  <div class="aviso info">
+    <div class="t">Avisos de cuota</div>
+    <p>Si para algún segmento no hay candidatos suficientes para llegar a la meta de
+    invitación, aparece un cartel rojo <strong>antes de empezar a convocar</strong>.
+    Es el momento de ampliar el criterio, no el día de la sesión.</p>
+  </div>
+</section>
+
+
+<!-- ════════════════ 6 ════════════════ -->
+<section id="s6">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 6</div>
+    <h2>Convocar: el embudo</h2>
+    <p>Cada contacto queda registrado, y al final de la sesión existen la tasa de show y el tiempo de convocatoria.</p>
+  </div>
+
+  <h3><span class="n">6.1</span> Los estados</h3>
+  <div class="diagrama">Candidato → Invitado → Contactado → Aceptó → Confirmado → Asistió
+                ↓            ↓           ↓          ↓
+          No contactable   Rechazó    Se cayó    No-show
+                                         ↓
+                                    Reemplazado</div>
+  <table>
+    <tr><td><span class="estado e-gris">Candidato</span></td><td>En la lista de espera. Nadie lo contactó todavía.</td></tr>
+    <tr><td><span class="estado e-azul">Invitado</span></td><td>Está en la lista de invitación: hay que contactarlo.</td></tr>
+    <tr><td><span class="estado e-violeta">Contactado</span></td><td>Se habló con la persona.</td></tr>
+    <tr><td><span class="estado e-naranja">Aceptó</span></td><td>Dijo que sí. Ya cuenta para la cuota.</td></tr>
+    <tr><td><span class="estado e-verde">Confirmado</span></td><td>Confirmó que viene. Es lo que cuenta para el cupo.</td></tr>
+    <tr><td><span class="estado e-verdeo">Asistió</span></td><td>Llegó a la sesión (sección 9).</td></tr>
+    <tr><td><span class="estado e-rojo">Rechazó</span> <span class="estado e-rojo">No contactable</span> <span class="estado e-ambar">No-show</span></td><td>Salen del embudo. Para volver hace falta <strong>reingresarlos</strong> con motivo (6.6).</td></tr>
+    <tr><td><span class="estado e-ambar">Se cayó</span></td><td>Aceptó o confirmó, y después avisó que no viene. Hay que reemplazarlo (sección 8).</td></tr>
+  </table>
+
+  <h3><span class="n">6.2</span> La lista de invitación</h3>
+  <p>Con la lista de espera armada, tocá <strong>Proponer lista de
+  invitación</strong> en Selección. El sistema elige de la lista de espera a quién
+  invitar para <strong>cumplir cada cuota asumiendo la caída</strong>. Si para algún
+  segmento no alcanza, lo dice en vez de completar con cualquiera. Elegí el canal
+  inicial y tocá <strong>Invitar</strong>.</p>
+  <figure><img class="recorte" src="capturas/15-invitacion-propuesta.jpg" />
+    <figcaption><b>Lista de invitación propuesta.</b> Arriba, el supuesto: se invita a 12 para sentar 8.</figcaption></figure>
+
+  <h3><span class="n">6.3</span> La pantalla del embudo</h3>
+  <p>Arriba están los contadores de cada estado. A la derecha, la <strong>cuota</strong>:
+  la barra verde es cuántos aceptaron o confirmaron contra el objetivo, y la celeste,
+  cuántos se invitaron contra la meta. Los filtros <strong>En curso</strong>,
+  <strong>Lista de espera</strong>, <strong>Cerrados</strong> y
+  <strong>Todos</strong> cambian qué filas se ven.</p>
+  <figure><img class="recorte" src="capturas/16-embudo.jpg" />
+    <figcaption><b>Embudo recién invitado.</b> Doce invitados, ninguno contactado todavía.</figcaption></figure>
+
+  <h3><span class="n">6.4</span> Ver el contacto y llamar</h3>
+  <ol class="pasos">
+    <li>En la fila, tocá 📞 para ver el celular, o ✉️ para el email.</li>
+    <li>El sistema lo pide a la bóveda en ese momento y te muestra el <strong>guion
+    sugerido</strong>, con el código de convocatoria que le tenés que dar a la
+    persona.</li>
+    <li>Llamá o escribí por fuera del sistema, y volvé a registrar el resultado.</li>
+  </ol>
+  <div class="aviso info">
+    <div class="t">Primero se invita, después se llama</div>
+    <p>El contacto se puede ver solo de quien ya está <strong>invitado</strong>. Al
+    invitar, COLOQUIO le avisa a la bóveda que hay una convocatoria para esa
+    persona en esta sesión, y sin ese aviso la bóveda no entrega el teléfono. Si
+    la persona retiró su consentimiento, la bóveda no acepta el aviso: la persona
+    queda en la lista de espera y el sistema te lo dice.</p>
+  </div>
+  <figure><img class="recorte media" src="capturas/17-contacto.jpg" />
+    <figcaption><b>Contacto puntual.</b> La lectura queda registrada a tu nombre en la bóveda. En COLOQUIO no se guarda.</figcaption></figure>
+
+  <h3><span class="n">6.5</span> Registrar el resultado: un clic por estado</h3>
+  <p>Los botones de la columna <strong>Registrar</strong> son los pasos posibles
+  desde el estado actual. Registrar tiene que ser más rápido que la llamada: si
+  hablaste con alguien y dijo que sí, tocá directamente <strong>Aceptó</strong>. El
+  sistema registra también el paso intermedio («contactado»), así que no hace falta
+  tocar dos botones.</p>
+  <ul class="puntos">
+    <li><strong>↻</strong> registra un intento <strong>sin respuesta</strong>: llamaste y no atendieron. No cambia el estado, pero cuenta para la métrica de intentos por confirmación.</li>
+    <li><strong>🗂</strong> abre el historial cualitativo de la persona.</li>
+    <li><strong>≡</strong> muestra todos sus eventos: cada cambio, con el canal, la hora y quién lo hizo.</li>
+  </ul>
+
+  <h3><span class="n">6.6</span> Reingresar a alguien</h3>
+  <p>Si alguien que había rechazado cambia de idea, tocá <strong>Reingresar</strong>
+  en su fila. Vuelve a <span class="estado e-azul">Invitado</span> y el motivo queda
+  registrado. A un <span class="estado e-gris">Candidato</span> que nunca fue
+  invitado se lo puede <strong>quitar</strong> de la lista. Lo demás queda
+  registrado y no se borra.</p>
+
+  <h3><span class="n">6.7</span> Cupo alcanzado</h3>
+  <p>Cuando los confirmados llegan al cupo, aparece el cartel verde con el tiempo de
+  convocatoria y la sesión pasa a <span class="estado e-verde">Confirmada</span>. Si
+  después alguien se cae y ya no alcanza, vuelve sola a
+  <span class="estado e-naranja">Convocando</span>.</p>
+  <figure><img class="recorte" src="capturas/21-cupo-alcanzado.jpg" />
+    <figcaption><b>Cupo alcanzado.</b> Ocho confirmados para ocho lugares.</figcaption></figure>
+  <figure><img class="recorte media" src="capturas/22-eventos.jpg" />
+    <figcaption><b>Eventos de una convocatoria.</b> Los que hizo el sistema por WhatsApp figuran como <code>sistema:whatsapp</code>.</figcaption></figure>
+</section>
+
+
+<!-- ════════════════ 7 ════════════════ -->
+<section id="s7">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 7</div>
+    <h2>Convocar por WhatsApp</h2>
+    <p>El canal se elige persona por persona. La respuesta de la persona mueve el embudo sola.</p>
+  </div>
+
+  <ol class="pasos">
+    <li>En la columna <strong>Canal</strong> de la fila, elegí <strong>WhatsApp</strong>.</li>
+    <li>Tocá <strong>WA invitación</strong>. La persona recibe la invitación con dos botones: «Sí, me interesa» y «No puedo».</li>
+    <li>Cuando responde, el estado cambia solo: «sí» la pasa a <span class="estado e-naranja">Aceptó</span> y «no» a <span class="estado e-rojo">Rechazó</span>.</li>
+    <li>Con alguien que aceptó, tocá <strong>WA confirmar</strong>. Si confirma, pasa a <span class="estado e-verde">Confirmado</span>. Con alguien confirmado podés mandar <strong>WA recordar</strong> el día anterior.</li>
+  </ol>
+  <figure><img class="recorte" src="capturas/18-whatsapp-respondio.jpg" />
+    <figcaption><b>Respondió que sí.</b> Pasó a «Aceptó» sola, y la ventana de WhatsApp quedó abierta.</figcaption></figure>
+
+  <div class="aviso ok">
+    <div class="t">La ventana gratis de 24 horas</div>
+    <p>Meta cobra cada invitación. Pero cuando la persona responde, se abren 24 horas
+    en las que los mensajes <strong>no se cobran</strong>. Por eso la invitación
+    lleva botones: para que la persona conteste. Si mandás la confirmación o el
+    recordatorio con la ventana abierta, salen gratis, y el sistema te lo dice.</p>
+  </div>
+  <figure><img class="recorte media" src="capturas/20-whatsapp-en-ventana.jpg" />
+    <figcaption><b>Confirmación dentro de la ventana.</b> Sin costo.</figcaption></figure>
+
+  <h3><span class="n">7.1</span> Cuando WhatsApp falla</h3>
+  <p>Si Meta rechaza la plantilla, si el número no tiene WhatsApp o si el mensaje no
+  se entrega, la convocatoria <strong>pasa a canal manual y conserva su
+  estado</strong>. La fila muestra <strong>WA falló → manual</strong>. Si ponés el
+  cursor encima, ves el motivo. Seguí por teléfono desde donde estaba.</p>
+  <figure><img class="recorte" src="capturas/19-whatsapp-degradado.jpg" />
+    <figcaption><b>Entrega fallida.</b> La persona sigue invitada, ahora por canal manual.</figcaption></figure>
+
+  <div class="aviso">
+    <div class="t">Si responde con un mensaje de texto</div>
+    <p>Un «sí» o un «no» escrito se interpreta igual que el botón. Cualquier otro
+    texto <strong>no se guarda</strong>, porque puede traer datos personales. La
+    fila muestra <strong>respondió por WA: revisar</strong> y hay que mirar el
+    mensaje en el teléfono.</p>
+  </div>
+</section>
+
+
+<!-- ════════════════ 8 ════════════════ -->
+<section id="s8">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 8</div>
+    <h2>Cuando alguien se cae</h2>
+    <p>Un reemplazo del mismo segmento, o una decisión explícita si no hay.</p>
+  </div>
+
+  <p>Si alguien que había aceptado o confirmado avisa que no viene, tocá
+  <strong>Se cayó</strong> en su fila. Aparece un aviso con el segmento que quedó
+  sin cubrir y el botón <strong>Reemplazar</strong>.</p>
+  <figure><img class="recorte" src="capturas/23-se-cayo.jpg" />
+    <figcaption><b>Segmento sin restituir.</b></figcaption></figure>
+
+  <h3><span class="n">8.1</span> Reemplazo del mismo segmento</h3>
+  <p>El sistema propone candidatos que <strong>coinciden con quien se fue en todas
+  las dimensiones que tienen cuota</strong>. Busca primero en la lista de espera y,
+  si ahí no hay, en el panel, con el mismo filtro de fatiga. Tocá
+  <strong>Elegir</strong>: el reemplazo queda invitado y marcado como tal, y quien
+  se cayó pasa a <span class="estado e-gris">Reemplazado</span>.</p>
+  <figure><img class="recorte" src="capturas/24-reemplazo.jpg" />
+    <figcaption><b>Candidatos que restituyen el segmento.</b> Abajo, desplegados, los que no.</figcaption></figure>
+
+  <p>Los candidatos que <strong>no</strong> restituyen el segmento se muestran
+  aparte, con la dimensión que rompen. Se pueden usar, pero el sistema pide que
+  aceptes la cuota incompleta, y la decisión queda registrada.</p>
+
+  <h3><span class="n">8.2</span> Sin candidatos: las tres salidas</h3>
+  <p>Si nadie restituye el segmento, el sistema <strong>lo dice</strong> en vez de
+  proponer a cualquiera, y ofrece tres salidas:</p>
+  <table>
+    <tr><td class="destacado">Bajar el cupo</td><td>El cupo baja en uno, y también el objetivo de los segmentos afectados.</td></tr>
+    <tr><td class="destacado">Correr la fecha</td><td>Se elige una fecha nueva para tener más tiempo de convocatoria.</td></tr>
+    <tr><td class="destacado">Aceptar la cuota incompleta</td><td>La sesión sigue así, y queda registrado que se aceptó.</td></tr>
+  </table>
+  <figure><img class="recorte" src="capturas/25-sin-reemplazo.jpg" />
+    <figcaption><b>Ningún candidato restituye el segmento.</b> Un mini-grupo de mujeres de 45 a 54 en Maldonado donde se agotó el panel.</figcaption></figure>
+  <p>La salida elegida queda en la pestaña <strong>Armado</strong>, en
+  <strong>Decisiones de cuota registradas</strong>, con quién la tomó y cuándo.</p>
+
+  <h3><span class="n">8.3</span> Cuando alguien se da de baja del panel</h3>
+  <p>Si una persona que había aceptado se da de baja de Gestión de paneles, COLOQUIO
+  la saca del embudo y borra todos sus datos (sección 13). En la sesión queda un
+  aviso rojo <strong>Baja del panel</strong> con el segmento que se perdió y el
+  botón <strong>Buscar reemplazo</strong>, que funciona igual que 8.1. La persona
+  ya no aparece en ningún lado.</p>
+</section>
+
+
+<!-- ════════════════ 9 ════════════════ -->
+<section id="s9">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 9</div>
+    <h2>El día de la sesión: recepción</h2>
+    <p>Pensada para usarse desde el teléfono, parado en la puerta.</p>
+  </div>
+
+  <h3><span class="n">9.1</span> El código de convocatoria</h3>
+  <p>Como COLOQUIO no guarda nombres, cada convocado tiene un <strong>código de seis
+  caracteres</strong>. Se le da al invitarlo (está en el guion y en los mensajes de
+  WhatsApp) y lo dice al llegar. Es la forma de identificarlo sin que el sistema
+  tenga datos personales.</p>
+
+  <h3><span class="n">9.2</span> Marcar llegadas</h3>
+  <ol class="pasos">
+    <li>Abrí la sesión en el teléfono y entrá a <strong>Recepción</strong>. Arriba está el contador de presentes contra el cupo.</li>
+    <li>Escribí el código que te dice la persona. La lista se filtra mientras escribís.</li>
+    <li>Tocá <strong>Llegó</strong>. Queda registrada la hora y quién la recibió, y se compromete su regalo.</li>
+  </ol>
+  <div class="par">
+    <figure><img class="recorte movil" src="capturas/26-recepcion-movil.jpg" />
+      <figcaption><b>Recepción, antes de empezar.</b></figcaption></figure>
+    <figure><img class="recorte movil" src="capturas/27-recepcion-busqueda.jpg" />
+      <figcaption><b>Búsqueda por código.</b></figcaption></figure>
+  </div>
+
+  <h3><span class="n">9.3</span> Alguien que no está confirmado</h3>
+  <p>Si la persona está en el embudo pero no confirmó (por ejemplo, aceptó y nunca
+  confirmó), aparece con un borde ámbar y el aviso <strong>no confirmado</strong>.
+  Para dejarla entrar, el sistema pide un motivo que queda registrado. Si el código
+  <strong>no es de esta sesión</strong>, el sistema lo dice: no dejes pasar a nadie
+  sin verificar.</p>
+  <div class="par">
+    <figure><img class="recorte movil" src="capturas/28-recepcion-no-confirmado.jpg" />
+      <figcaption><b>No confirmado:</b> entra con motivo.</figcaption></figure>
+    <figure><img class="recorte movil" src="capturas/29-recepcion-codigo-ajeno.jpg" />
+      <figcaption><b>Código que no es de la sesión.</b></figcaption></figure>
+  </div>
+
+  <h3><span class="n">9.4</span> Cerrar la sesión</h3>
+  <p>Cuando termina, al pie de Recepción escribí las notas de la sesión, si querés, y
+  tocá <strong>Cerrar sesión</strong>. Al cerrar:</p>
+  <ul class="puntos">
+    <li>quien estaba confirmado y no llegó pasa a <span class="estado e-ambar">No-show</span>;</li>
+    <li>se registra la participación de cada presente en su historial. Desde ese momento cuenta para el filtro de fatiga;</li>
+    <li>se calcula la <strong>tasa de show</strong>: presentes sobre confirmados;</li>
+    <li>la sesión pasa a <span class="estado e-verdeo">Realizada</span> y ya no admite cambios.</li>
+  </ul>
+  <div class="par">
+    <figure><img class="recorte movil" src="capturas/30-recepcion-presentes.jpg" />
+      <figcaption><b>Ocho presentes.</b></figcaption></figure>
+    <figure><img class="recorte movil" src="capturas/31-cerrar-sesion.jpg" />
+      <figcaption><b>Confirmar el cierre.</b></figcaption></figure>
+  </div>
+  <div class="aviso grave">
+    <div class="t">Las notas son de la sesión, no de las personas</div>
+    <p>Escribí cómo fue el grupo, no quién era quién. Si una nota tiene un teléfono,
+    un email o un documento, el sistema no la guarda.</p>
+  </div>
+</section>
+
+
+<!-- ════════════════ 10 ════════════════ -->
+<section id="s10">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 10</div>
+    <h2>Incentivos</h2>
+    <p>Un regalo por sesión. No son puntos ni pasan por la gamificación de Gestión de paneles.</p>
+  </div>
+
+  <p>Cada vez que se registra una llegada, queda un <strong>compromiso</strong> de
+  regalo con el regalo por defecto de la sesión. En la pestaña
+  <strong>Incentivos</strong>:</p>
+  <ol class="pasos">
+    <li>Para cambiar el regalo de alguien, elegí otro en su fila. Se puede mientras no esté entregado.</li>
+    <li>Cuando se lo das, tocá <strong>Marcar entregado</strong>. Queda la hora y quién lo entregó.</li>
+  </ol>
+  <figure><img class="recorte" src="capturas/32-incentivos.jpg" />
+    <figcaption><b>Incentivos.</b> Arriba, lo comprometido y lo entregado en la sesión, y lo comprometido en todo el estudio.</figcaption></figure>
+  <div class="aviso info">
+    <div class="t">Lo que el sistema no hace</div>
+    <p>COLOQUIO registra el compromiso y la entrega. No ejecuta pagos ni resuelve el
+    tratamiento fiscal del regalo.</p>
+  </div>
+
+  <h3><span class="n">10.1</span> El total por estudio</h3>
+  <p>El valor comprometido de todas las sesiones de un estudio se ve en su ficha y en
+  la lista de estudios. Es lo que el investigador necesita para cotizar.</p>
+
+  <h3><span class="n">10.2</span> El historial después de la sesión</h3>
+  <p>Después del cierre, el historial de cada presente muestra la sesión nueva. La
+  próxima vez que alguien arme un grupo de la misma categoría, el filtro de fatiga lo
+  va a excluir.</p>
+  <figure><img class="recorte media" src="capturas/33-historial-despues.jpg" />
+    <figcaption><b>Historial de un participante</b> después del cierre.</figcaption></figure>
+
+  <h3><span class="n">10.3</span> Cancelar una sesión</h3>
+  <p>Desde <strong>Armado → Cancelar sesión</strong>. Pide el motivo y, si había gente
+  confirmada, permite marcar a quiénes <strong>compensar</strong> con un regalo y
+  describir cómo se resolvió. La sesión queda <span class="estado e-rojo">Cancelada</span>
+  y los compromisos de compensación aparecen en Incentivos.</p>
+</section>
+
+
+<!-- ════════════════ 11 ════════════════ -->
+<section id="s11">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 11</div>
+    <h2>Tablero y métricas</h2>
+    <p>Lo que antes no se podía medir.</p>
+  </div>
+
+  <figure><img class="recorte" src="capturas/34-tablero.jpg" />
+    <figcaption><b>Tablero</b> después de cerrar la primera sesión.</figcaption></figure>
+
+  <table>
+    <tr><th>Métrica</th><th>Qué dice</th></tr>
+    <tr><td class="destacado">Tasa de show</td><td>Presentes sobre confirmados, por sesión y en promedio. Es la base para decidir el ratio de sobre-reclutamiento.</td></tr>
+    <tr><td class="destacado">Ratio usado y ratio necesario</td><td>El ratio con que se armó la sesión, contra el que hizo falta de verdad (invitados sobre presentes). Con unos meses de datos, el ratio deja de ser una intuición.</td></tr>
+    <tr><td class="destacado">Horas a cupo</td><td>Tiempo entre la primera invitación y el cupo confirmado.</td></tr>
+    <tr><td class="destacado">Intentos por confirmación</td><td>Por canal. Es lo que dice si WhatsApp rinde más que la llamada.</td></tr>
+    <tr><td class="destacado">Plantillas pagas y mensajes gratis</td><td>Cuántas plantillas de WhatsApp se cobraron, y cuántos mensajes salieron dentro de la ventana gratis.</td></tr>
+    <tr><td class="destacado">Bloqueos por fatiga</td><td>Cuántas veces el filtro bloqueó a alguien, y cuántas se anuló. Si casi todas se anulan, el umbral está mal puesto.</td></tr>
+    <tr><td class="destacado">Realizadas con cuota completa</td><td>Sesiones que cerraron con todas las cuotas cubiertas, sobre el total.</td></tr>
+  </table>
+</section>
+
+
+<!-- ════════════════ 12 ════════════════ -->
+<section id="s12">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 12</div>
+    <h2>Configuración</h2>
+    <p>Catálogos y umbrales. Todos se cambian desde la aplicación.</p>
+  </div>
+
+  <figure><img class="recorte" src="capturas/35-configuracion.jpg" />
+    <figcaption><b>Configuración.</b> Solo el administrador puede modificarla. Los demás roles la ven en modo lectura.</figcaption></figure>
+
+  <h3><span class="n">12.1</span> Umbrales de fatiga</h3>
+  <table>
+    <tr><td class="destacado">Ventana por categoría</td><td>Cuántos días hacia atrás se miran las participaciones de la misma categoría. Por defecto, 180.</td></tr>
+    <tr><td class="destacado">Participaciones que excluyen</td><td>Cuántas participaciones de la categoría dentro de la ventana dejan a alguien afuera. Por defecto, 1.</td></tr>
+    <tr><td class="destacado">Ventana y tope global</td><td>Un límite de participaciones de cualquier categoría. Por defecto, 3 en 365 días.</td></tr>
+  </table>
+  <div class="aviso">
+    <div class="t">Una definición metodológica</div>
+    <p>Qué ventana usar y cómo agrupar los estudios en categorías lo definen los
+    investigadores. Los valores por defecto son un punto de partida.</p>
+  </div>
+
+  <h3><span class="n">12.2</span> Categorías de estudio</h3>
+  <p>Una por línea, con la forma <code>clave | etiqueta</code>. La clave es la que usa
+  el filtro de fatiga. <strong>No la cambies</strong> si ya hay participaciones en
+  esa categoría: el filtro dejaría de reconocerlas.</p>
+
+  <h3><span class="n">12.3</span> Catálogo de regalos</h3>
+  <p><strong>+ Regalo</strong> agrega uno con nombre, valor y moneda. Un regalo
+  inactivo no se puede asignar, pero los compromisos que ya lo usan se conservan.</p>
+
+  <h3><span class="n">12.4</span> Guion general</h3>
+  <p>El texto que se sugiere al llamar cuando el estudio no tiene guion propio. Usa
+  las mismas variables de la sección 3.3.</p>
+
+  <h3><span class="n">12.5</span> Plantillas de WhatsApp</h3>
+  <p>Los nombres de las plantillas aprobadas por Meta para invitación, recordatorio y
+  confirmación, y el idioma. Cada plantilla lleva cinco variables (tema, fecha,
+  lugar, incentivo y código) y dos botones de respuesta rápida. La etiqueta de
+  arriba indica si el canal está configurado.</p>
+
+  <h3><span class="n">12.6</span> Importar sesiones históricas</h3>
+  <p>Al principio el filtro de fatiga no sabe nada de los grupos que Equipos ya hizo.
+  Para que tenga memoria desde el primer día, cargá esos grupos: la categoría, la
+  fecha y los <code>id_persona</code> de los participantes, uno por línea. Esos ids
+  se obtienen en Gestión de paneles. Cada participación queda en el historial como
+  «importada» y cuenta igual para la fatiga.</p>
+  <figure><img class="recorte media" src="capturas/36-importar-historico.jpg" />
+    <figcaption><b>Importar una sesión histórica.</b></figcaption></figure>
+
+  <h3><span class="n">12.7</span> Roles</h3>
+  <p>La tabla lista a todo el padrón de Equipos. Marcá los roles de cada persona y
+  tocá <strong>Guardar</strong>. El rol de administrador de quien es admin en
+  Gestión de paneles no se puede quitar desde acá.</p>
+  <figure><img class="recorte" src="capturas/37-roles.jpg" />
+    <figcaption><b>Roles en COLOQUIO.</b></figcaption></figure>
+</section>
+
+
+<!-- ════════════════ 13 ════════════════ -->
+<section id="s13">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 13</div>
+    <h2>Cumplimiento</h2>
+    <p>Para el administrador: la baja de una persona y la salud de los datos.</p>
+  </div>
+
+  <h3><span class="n">13.1</span> La cascada de baja</h3>
+  <p>Cuando alguien ejerce su derecho de baja en Gestión de paneles, COLOQUIO recibe
+  un pendiente. Cada 30 minutos, sin intervención de nadie, el sistema:</p>
+  <ol class="pasos">
+    <li>borra todo lo de esa persona: convocatorias, asistencias, regalos, mensajes de WhatsApp e historial;</li>
+    <li>verifica que no quedó nada;</li>
+    <li>recién entonces confirma el borrado a la bóveda. Si algo falla, lo informa y lo reintenta en la pasada siguiente. <strong>Nunca confirma un borrado que no ocurrió.</strong></li>
+  </ol>
+  <p>Si la persona estaba en un embudo activo, la sesión recibe el aviso de baja de la
+  sección 8.3. Desde <strong>Configuración → Cumplimiento → Correr cascada de
+  baja</strong> se puede forzar una pasada sin esperar.</p>
+
+  <h3><span class="n">13.2</span> Verificar y reparar</h3>
+  <p>El sistema lleva contadores (personas por estado, cuota cubierta, valor
+  comprometido) y el historial de cada persona. <strong>Verificar
+  consistencia</strong> los recalcula desde cero y muestra las diferencias.
+  <strong>Verificar y reparar</strong> además corrige lo que esté mal. Conviene
+  correrlo si un número del tablero no cierra con lo que se ve en el embudo.</p>
+  <figure><img class="recorte" src="capturas/38-cumplimiento.jpg" />
+    <figcaption><b>Cumplimiento.</b> Todo consistente.</figcaption></figure>
+</section>
+
+
+<!-- ════════════════ 14 ════════════════ -->
+<section id="s14">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 14</div>
+    <h2>Preguntas frecuentes</h2>
+  </div>
+
+  <h4>¿Por qué no veo el nombre de los candidatos?</h4>
+  <p>Porque COLOQUIO no guarda datos personales. Identificás a cada persona por su
+  código y su segmento. El teléfono o el email se piden en el momento de llamar
+  (6.4).</p>
+
+  <h4>Al pedir un contacto aparece «La bóveda no entregó el contacto». ¿Qué hago?</h4>
+  <p>La bóveda rechazó la lectura. Casi siempre es porque la persona retiró su
+  consentimiento después de ser invitada, y no hay forma de saltearlo desde
+  COLOQUIO. Si la convocatoria había vencido (por ejemplo, porque la sesión se
+  corrió de fecha), COLOQUIO la renueva solo y vuelve a pedir el contacto: si
+  igual aparece el mensaje, es el consentimiento. Si pasa con muchas personas a
+  la vez, avisale al administrador.</p>
+
+  <h4>Invité a una lista y algunos quedaron en espera.</h4>
+  <p>La bóveda no aceptó su convocatoria porque ya no tienen consentimiento vigente
+  de contacto. El sistema lo avisa al invitar, y esas personas no se pueden
+  convocar.</p>
+
+  <h4>Corrí la fecha de la sesión. ¿Tengo que hacer algo con los invitados?</h4>
+  <p>No. Al guardar la fecha nueva, COLOQUIO le actualiza a la bóveda la
+  convocatoria de todos los que siguen en curso. Si la bóveda no responde en ese
+  momento, lo avisa, y se corrige solo la próxima vez que pidas un contacto.</p>
+
+  <h4>Un candidato que quiero no aparece en la selección.</h4>
+  <p>Puede ser que no tenga consentimiento de contacto vigente (no aparece nunca), que
+  esté excluido por fatiga (está en la tabla de excluidos) o que ya esté en otra
+  sesión del mismo estudio (aparece marcado).</p>
+
+  <h4>La selección semántica dice que se resolvió demográfica.</h4>
+  <p>El motor de Gestión de paneles no respondió, tu usuario no tiene permiso de
+  consulta ahí, o no hay contenido para ese segmento. El cartel dice cuál de las
+  tres. La selección demográfica sigue sirviendo para convocar.</p>
+
+  <h4>¿Puedo invitar a alguien que no está en la lista propuesta?</h4>
+  <p>Sí. Cualquier persona de la lista de espera se puede invitar desde el embudo
+  (filtro <strong>Lista de espera</strong> → <strong>Invitar</strong>).</p>
+
+  <h4>Marqué un estado por error.</h4>
+  <p>Los estados no se deshacen: el embudo es un registro. Si alguien quedó en
+  «rechazó» por error, reingresalo con un motivo (6.6).</p>
+
+  <h4>Me quedé sin señal en la recepción.</h4>
+  <p>Anotá los códigos y registralos cuando vuelva la conexión: mientras la sesión
+  no esté cerrada, se pueden cargar. La hora que queda es la de la carga, no la de
+  la llegada.</p>
+
+  <h4>¿Por qué el sistema rechazó mis notas?</h4>
+  <p>Porque tienen algo con forma de teléfono, email o documento. Reescribilas sin
+  ese dato.</p>
+</section>
+
+
+<!-- ════════════════ 15 ════════════════ -->
+<section id="s15">
+  <div class="cab">
+    <div class="barra"></div>
+    <div class="kicker">Sección 15</div>
+    <h2>Glosario</h2>
+  </div>
+  <table class="parte">
+    <tr><td class="destacado">Anulación</td><td>Saltar una regla (el filtro de fatiga, o dejar entrar a alguien no confirmado) con un motivo que queda registrado.</td></tr>
+    <tr><td class="destacado">Bóveda</td><td>La base de datos de personas de Gestión de paneles. Tiene los datos personales y los consentimientos.</td></tr>
+    <tr><td class="destacado">Cascada de baja</td><td>El borrado, en COLOQUIO, de todo lo de una persona que se dio de baja del panel.</td></tr>
+    <tr><td class="destacado">Código de convocatoria</td><td>Seis caracteres que identifican a un convocado sin datos personales. Lo dice al llegar.</td></tr>
+    <tr><td class="destacado">Cuota</td><td>Cuántas personas de un segmento querés sentadas: por ejemplo, 4 mujeres.</td></tr>
+    <tr><td class="destacado">Cupo</td><td>Cuántas personas querés sentadas en total.</td></tr>
+    <tr><td class="destacado">Embudo</td><td>El recorrido de cada convocatoria por sus estados, de candidato a asistió.</td></tr>
+    <tr><td class="destacado">Evidencia</td><td>La respuesta de una encuesta anterior que hizo que el motor semántico eligiera a alguien.</td></tr>
+    <tr><td class="destacado">Fatiga cualitativa</td><td>Haber participado de sesiones cualitativas recientes. En exceso, excluye.</td></tr>
+    <tr><td class="destacado"><code>id_persona</code></td><td>Identificador opaco de una persona, común a todos los sistemas de Equipos.</td></tr>
+    <tr><td class="destacado">Lista de espera</td><td>Los candidatos incorporados a una sesión que todavía no fueron invitados.</td></tr>
+    <tr><td class="destacado">Pauta</td><td>El instrumento de la sesión: tópicos ordenados con objetivo, minutos y repreguntas.</td></tr>
+    <tr><td class="destacado">Ratio de sobre-reclutamiento</td><td>Cuántos invitar por cada lugar. Con 1,5 se invita a 12 para sentar 8.</td></tr>
+    <tr><td class="destacado"><code>refEstudio</code></td><td>Identificador del estudio, compartido con Gestión de paneles en los estudios mixtos.</td></tr>
+    <tr><td class="destacado">Restituir el segmento</td><td>Reemplazar a alguien por otra persona que coincide con ella en todas las dimensiones con cuota.</td></tr>
+    <tr><td class="destacado">Segmento</td><td>Sexo, tramo etario y localidad de una persona.</td></tr>
+    <tr><td class="destacado">Tasa de show</td><td>Presentes sobre confirmados.</td></tr>
+    <tr><td class="destacado">Ventana de servicio</td><td>Las 24 horas después de que alguien responde por WhatsApp, en las que los mensajes no se cobran.</td></tr>
+  </table>
+  <div class="pie-pagina">Equipos Consultores · COLOQUIO · Manual de usuario · Fase 1</div>
+</section>
+
+</body>
+</html>
