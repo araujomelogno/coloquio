@@ -49,12 +49,21 @@ corta antes de la transacción y no se invita a nadie a medias. Hay que pedirle 
 `paneles` que aplique la 0016 (ver `paneles/docs/DESPLIEGUE - R5.2.a
 convocatoria externa.md`).
 
-Opcional: la batería de `paneles`, conectada como coloquio, tiene que dar en
-verde sus dos chequeos de R5.2.a:
+Opcional: la batería de `paneles` conectada como coloquio. El script
+`verificar_coloquio.py` **está en el repo `paneles`, no en este**. Contra
+producción se corre **siempre con `--solo-lectura`**: sin esa opción escribe
+un escenario de prueba en la bóveda. Cómo armar las dos conexiones está en
+[`DESPLIEGUE_coloquio_fase1.md` §1.3](DESPLIEGUE_coloquio_fase1.md#13--la-batería-de-paneles-vista-desde-coloquio).
 
 ```bash
-python3 scripts/verificar_coloquio.py     # en el repo paneles
+cd paneles                                   # el clon de araujomelogno/paneles
+python3 scripts/verificar_coloquio.py --solo-lectura
+#   Pasaron los 7 chequeos. «privilegios efectivos sobre funciones»:
+#   7 funciones ejecutables, todas en la lista (incluye declarar_convocatoria)
 ```
+
+Los dos chequeos propios de R5.2.a necesitan escenario, así que no corren en
+solo lectura. Los corrió `paneles` en el paso 6 de su despliegue de la 0016.
 
 ## 2 · Pruebas locales
 
