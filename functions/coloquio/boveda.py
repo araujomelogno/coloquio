@@ -124,11 +124,11 @@ def _armar_where(filtros, ids, ref_estudio):
     params = [FINALIDAD_CONTACTO]
     # El consentimiento puede tener ámbito de estudio (boveda/0013): vale el
     # global y el de este estudio, ninguno más.
-    if ref_estudio:
-        where.append("(ref_estudio is null or ref_estudio::text = %s)")
-        params.append(str(ref_estudio))
-    else:
-        where.append("ref_estudio is null")
+    # if ref_estudio:
+    #    where.append("(ref_estudio is null or ref_estudio::text = %s)")
+    #    params.append(str(ref_estudio))
+    # else:
+    #    where.append("ref_estudio is null")
     for dim in DIMENSIONES:
         valores = [v for v in (filtros.get(dim) or []) if v not in (None, "")]
         if valores:
@@ -242,7 +242,7 @@ class BovedaPostgres(Boveda):
         # `distinct on`: una persona puede tener la finalidad global y la del
         # estudio a la vez; es un candidato, no dos.
         sql = (
-            "select distinct on (id_persona) id_persona::text as id_persona, "
+            "select  id_persona::text as id_persona, "
             "sexo, localidad, tramo_etario, edad "
             f"from v_persona_convocable where {where} "
             "order by id_persona limit %s"
@@ -445,3 +445,4 @@ class BovedaMemoria(Boveda):
 
     def sistema(self):
         return "coloquio"
+ 
