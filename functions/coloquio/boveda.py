@@ -120,7 +120,7 @@ def _validar_referencia(referencia):
 def _armar_where(filtros, ids, ref_estudio):
     """SQL y parámetros de la selección sobre la vista. Solo `%s`."""
     filtros = filtros or {}
-    where = ["finalidad = %s"]
+    where = ["%s = any(finalidades)"]
     params = [FINALIDAD_CONTACTO]
     # El consentimiento puede tener ámbito de estudio (boveda/0013): vale el
     # global y el de este estudio, ninguno más.
