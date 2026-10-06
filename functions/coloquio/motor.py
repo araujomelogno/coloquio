@@ -47,7 +47,7 @@ def criterios_para_paneles(filtros, textos):
 
 def _evidencias(item):
     salida = []
-    for d in item.get("detalle") or []:
+    for d in item.get("criterios") or []:
         if d.get("tipo") != "semantico":
             continue
         ev = d.get("evidencia") or {}
@@ -74,6 +74,8 @@ def normalizar_resultado(crudo):
             "confianza": item.get("confianza"),
             "rango": i + 1,
             "evidencia": _evidencias(item),
+             "verificacionIncompleta": item.get("verificacion_incompleta"),
+
         })
     return {
         "items": items,
