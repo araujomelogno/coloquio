@@ -2,7 +2,7 @@
 
 **Sistema:** COLOQUIO · investigación cualitativa · Equipos Consultores
 **Alcance:** Fase 1 — estudio cualitativo y embudo de convocatoria
-**Última actualización:** 2026-09-30
+**Última actualización:** 2026-11-05
 
 ---
 
@@ -83,6 +83,10 @@ restricción real del sistema. Las pruebas están en `functions/tests/`.
 | [D44](#d44) | La convocatoria se declara en la bóveda al invitar, antes de la transacción | J · Convocatoria declarada |
 | [D46](#d46) | El vencimiento es la sesión más dos días, con el tope de la bóveda | J |
 | [D47](#d47) | Si la declaración venció, se repone al leer el contacto, una vez | J |
+| [D48](#d48) | El doble de la bóveda sigue la vista de la `0021`, no la de antes | L · Selección R1.18 |
+| [D49](#d49) | Modo laxo por defecto, explícito siempre, y lo excluido se cuenta | L |
+| [D50](#d50) | Un estricto que vacía la lista no cae a demográfica | L |
+| [D51](#d51) | La calidad de evidencia viaja hasta el embudo, y la propuesta la respeta | L |
 | [D45](#d45) | Los umbrales de fatiga son un punto de partida, no una definición | K · Abierto |
 
 ---
@@ -1184,6 +1188,130 @@ en las dos lecturas (D8).
 **Dónde vive.** `coloquio/canales.py` (`leer_contacto`).
 
 **Cómo se verifica.** `test_declaracion_vencida_se_repone_al_leer_el_contacto`.
+
+---
+
+# Bloque L · Selección: modo y calidad de evidencia (R1.18)
+
+<a id="d48"></a>
+## D48 · El doble de la bóveda sigue la vista de la `0021`, no la de antes
+
+**El problema.** `boveda/0021` dejó `v_persona_convocable` en una fila por
+persona con `finalidades text[]`, y ese arreglo **solo** lista consentimientos
+con `ref_estudio is null`. `BovedaMemoria` seguía aceptando a alguien con un
+`contacto_participacion` de ámbito estudio si el estudio coincidía. Las pruebas
+pasaban porque el doble cumplía el contrato viejo; producción no lo habría
+hecho.
+
+**La decisión.** El doble responde «¿está en la vista?» en un solo lugar
+(`_en_la_vista`), y lo usan `convocables()`, `declarar_convocatoria()` y
+`contacto()`, igual que en la base, donde las dos funciones de la `0016`
+preguntan a la misma vista. `convocables()` ya no recibe `ref_estudio`: el gate
+no depende del estudio.
+
+**Alternativas descartadas.** *Dejar el parámetro por si vuelve el ámbito
+estudio.* Un parámetro que nadie usa invita a creer que filtra. Si vuelve, lo
+traerá una migración, y con ella el cambio.
+
+**Dónde vive.** `coloquio/boveda.py`.
+
+**Cómo se verifica.** `test_consentimiento_de_ambito_estudio_no_entra_ni_para_su_estudio`
+(falla contra el doble anterior).
+
+---
+
+<a id="d49"></a>
+## D49 · Modo laxo por defecto, explícito siempre, y lo excluido se cuenta
+
+**El problema.** `paneles` combina los criterios en modo `estricto` si no se le
+dice otra cosa, y en estricto descarta a los dudosos y a los que no tienen
+evidencia. COLOQUIO no mandaba `duro` y descartaba `penalizado`,
+`verificacion_incompleta` y la confianza al normalizar. El coordinador no tenía
+forma de saber que había gente afuera, ni con qué calidad de evidencia entró
+la que estaba adentro.
+
+**La decisión.** (addendum R1.18)
+- El modo se elige por consulta (`modoSemantico`), es `laxo` por defecto y se
+  manda **siempre** explícito: no depender del default de `paneles`.
+- Cada criterio semántico lleva `duro`. `peso` y `umbral_distancia` no se
+  exponen.
+- `normalizar_resultado()` conserva todos los veredictos por criterio y las tres
+  marcas por candidato. Si una marca falta en la respuesta, se deduce de los
+  veredictos y la duda se resuelve **en contra** (contrato v2 de `paneles`: un
+  campo ausente es «no se sabe»).
+- `excluidos` se resume en conteos por `no_cumple`, `dudoso` y
+  `sin_evidencia`. `irrelevante` y `sin_evidencia_pertinente` cuentan como
+  `sin_evidencia`, porque el propio `_combinar()` los trata así. Solo conteos:
+  los ids excluidos no se le muestran a nadie.
+- `sin_verificar` tiene su propio color y su propio texto: no es `dudoso`.
+
+**Consecuencias.** `MotorMemoria` arma la respuesta **cruda** de `paneles` con
+las reglas de `_combinar()` y la pasa por `normalizar_resultado()`, igual que
+`MotorPanelesHttp`. Un doble que devolviera ya normalizado probaría un camino
+que producción no recorre.
+
+**Dónde vive.** `coloquio/motor.py`, `coloquio/seleccion.py`,
+`web/public/js/paginas/seleccion.js`.
+
+**Cómo se verifica.** Las pruebas `test_r118_*` de `test_dod.py`, en particular
+`test_r118_sin_modo_corre_en_laxo_y_lo_dice` y
+`test_r118_normalizar_no_descarta_lo_que_manda_paneles` (el cuerpo HTTP y una
+respuesta cruda con la forma real).
+
+---
+
+<a id="d50"></a>
+## D50 · Un estricto que vacía la lista no cae a demográfica
+
+**El problema.** Si el motor no devolvía a nadie, la selección caía a
+demográfica pura. Eso estaba pensado para «no hay contenido embebido». Pero si
+el motor **encontró** gente y el modo estricto (o un criterio duro) la dejó
+afuera, caer a demográfica metería por la ventana justamente a los excluidos.
+
+**La decisión.** Si `items` viene vacío y `excluidos` no, la lista queda vacía,
+un cartel dice cuántos se excluyeron y en qué modo, y sugiere probar en laxo. La
+caída a demográfica queda para el motor caído o sin contenido, como antes.
+
+**Dónde vive.** `coloquio/seleccion.py`.
+
+**Cómo se verifica.** `test_r118_estricto_que_vacia_no_cae_a_demografica`.
+
+---
+
+<a id="d51"></a>
+## D51 · La calidad de evidencia viaja hasta el embudo, y la propuesta la respeta
+
+**El problema.** La propuesta de invitación (R1.6) trabaja sobre la lista de
+espera en Firestore, que no sabía con qué evidencia entró cada uno. En laxo, la
+lista puede tener penalizados, y el sistema no debería elegirlos solo para
+completar una cuota.
+
+**La decisión.** Cada convocatoria guarda `marcasEvidencia`, un subconjunto de
+`penalizado`, `verificacionIncompleta` y `confianzaBaja`. Son nombres de una
+lista blanca, nunca texto: la evidencia textual no se guarda. Llegan desde la
+lista, igual que `puntaje`: son lo que el coordinador vio al elegir. La
+propuesta prefiere siempre a un verificado que aporte a la cuota antes que a un
+candidato de evidencia floja, aunque aporte menos. Si no le queda otra que usar
+uno flojo, lo informa (`conEvidenciaFloja`, `avisos`). El reemplazo ofrece
+primero a los verificados de la lista de espera, y muestra la marca de cada
+uno: la decisión es del coordinador.
+
+**Alternativas descartadas.** *Volver a consultar el motor al proponer.* Es la
+consulta cara y no es determinista: la lista de espera dejaría de ser lo que el
+coordinador eligió. *Guardar la evidencia.* Es texto libre sobre una persona.
+
+**Consecuencias.** Un cliente que no mande las marcas hace que un penalizado
+cuente como verificado en la propuesta. No abre ningún dato. Solo cambia el
+orden de una sugerencia que igual pasa por un humano.
+
+**Dónde vive.** `coloquio/seleccion.py` (`marcas_evidencia`),
+`coloquio/embudo.py` (`nueva`), `coloquio/sesiones.py` (`proponer_invitacion`,
+`evidencia_floja`), `coloquio/reemplazo.py`.
+
+**Cómo se verifica.** `test_r118_propuesta_no_usa_penalizados_si_hay_verificados`
+(que además comprueba que sin las marcas los habría elegido),
+`test_r118_propuesta_recurre_a_penalizados_y_lo_dice`,
+`test_r118_reemplazo_ofrece_primero_verificados`.
 
 ---
 
