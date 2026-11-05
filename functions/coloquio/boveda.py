@@ -20,8 +20,9 @@ Tres reglas que este módulo hace cumplir y que no conviene reimplementar en
 otro lado:
 
 * **El gate de consentimiento es la vista.** Toda lista de candidatos sale de
-  `v_persona_convocable` con `finalidad = 'contacto_participacion'`. No hay un
-  `if` en Python que decida quién consintió (R1.2).
+  `v_persona_convocable` con `'contacto_participacion' = any(finalidades)`
+  (una fila por persona desde `boveda/0021`). No hay un `if` en Python que
+  decida quién consintió (R1.2).
 * **`p_actor` es el email del usuario humano** que pidió el contacto, siempre
   (HANDOFF §3). `contacto()` se niega a llamar sin él: si la operación no
   tiene una persona detrás, no debería estar pidiendo un contacto.
@@ -62,12 +63,15 @@ class Boveda:
 
     nombre = "boveda"
 
-    def convocables(self, filtros=None, ids=None, ref_estudio=None, limite=500):
+    def convocables(self, filtros=None, ids=None, limite=500):
         """Personas con consentimiento vigente de contacto_participacion.
 
         `filtros`: {sexo: [..], tramoEtario: [..], localidad: [..],
         edadMin, edadMax}. `ids`: restringe a ese conjunto (para cruzar con
         el ranking semántico). Devuelve [{idPersona, segmento, edad}].
+
+        No depende del estudio: desde `boveda/0021` la vista solo cuenta los
+        consentimientos de ámbito persona o panel (`ref_estudio is null`).
         """
         raise NotImplementedError
 
@@ -117,18 +121,11 @@ def _validar_referencia(referencia):
         raise DatosInvalidos("La declaración de convocatoria necesita la referencia de la sesión.")
 
 
-def _armar_where(filtros, ids, ref_estudio):
+def _armar_where(filtros, ids):
     """SQL y parámetros de la selección sobre la vista. Solo `%s`."""
     filtros = filtros or {}
     where = ["%s = any(finalidades)"]
     params = [FINALIDAD_CONTACTO]
-    # El consentimiento puede tener ámbito de estudio (boveda/0013): vale el
-    # global y el de este estudio, ninguno más.
-    # if ref_estudio:
-    #    where.append("(ref_estudio is null or ref_estudio::text = %s)")
-    #    params.append(str(ref_estudio))
-    # else:
-    #    where.append("ref_estudio is null")
     for dim in DIMENSIONES:
         valores = [v for v in (filtros.get(dim) or []) if v not in (None, "")]
         if valores:
@@ -235,14 +232,12 @@ class BovedaPostgres(Boveda):
         finally:
             cur.close()
 
-    def convocables(self, filtros=None, ids=None, ref_estudio=None, limite=500):
+    def convocables(self, filtros=None, ids=None, limite=500):
         if ids is not None and not ids:
             return []
-        where, params = _armar_where(filtros, ids, ref_estudio)
-        # `distinct on`: una persona puede tener la finalidad global y la del
-        # estudio a la vez; es un candidato, no dos.
+        where, params = _armar_where(filtros, ids)
         sql = (
-            "select  id_persona::text as id_persona, "
+            "select id_persona::text as id_persona, "
             "sexo, localidad, tramo_etario, edad "
             f"from v_persona_convocable where {where} "
             "order by id_persona limit %s"
@@ -317,8 +312,15 @@ class BovedaPostgres(Boveda):
 class BovedaMemoria(Boveda):
     """Imita la superficie: el gate, la auditoría y la cascada.
 
-    `personas`: {id: {segmento, edad, consiente, celular, email}}. Los datos de
-    contacto viven acá y solo acá, igual que en la bóveda real.
+    `personas`: {id: {segmento, edad, consiente, refEstudio, celular, email}}.
+    Los datos de contacto viven acá y solo acá, igual que en la bóveda real.
+
+    El gate es el de `boveda/0021`: entra quien tiene `contacto_participacion`
+    vigente **de ámbito persona o panel**. `refEstudio` modela un
+    consentimiento de ámbito estudio, y ése no entra en `finalidades`: la
+    persona no aparece en la vista, para ningún estudio —tampoco para el
+    suyo—, y por lo tanto `declarar_convocatoria()` y `contacto()`, que en la
+    base preguntan a la misma vista, también la rechazan.
 
     Reproduce el contrato de R5.2.a (`boveda/0016`): `contacto()` exige una
     convocatoria declarada y vigente para COLOQUIO, y `declarar_convocatoria()`
@@ -342,11 +344,13 @@ class BovedaMemoria(Boveda):
         self.reloj = reloj or (lambda: dt.datetime.now(dt.timezone.utc))
         self.falla = None  # simular la bóveda caída
 
-    def _pasa(self, p, filtros, ref_estudio):
-        if not p.get("consiente", True):
-            return False
-        ambito = p.get("refEstudio")
-        if ambito and ambito != ref_estudio:
+    @staticmethod
+    def _en_la_vista(p):
+        """`'contacto_participacion' = any(finalidades)` en `v_persona_convocable`."""
+        return bool(p) and p.get("consiente", True) and not p.get("refEstudio")
+
+    def _pasa(self, p, filtros):
+        if not self._en_la_vista(p):
             return False
         filtros = filtros or {}
         for dim in DIMENSIONES:
@@ -360,20 +364,19 @@ class BovedaMemoria(Boveda):
             return False
         return True
 
-    def convocables(self, filtros=None, ids=None, ref_estudio=None, limite=500):
+    def convocables(self, filtros=None, ids=None, limite=500):
         universo = self.personas.items()
         if ids is not None:
             permitidos = {str(i) for i in ids}
             universo = [(k, v) for k, v in universo if k in permitidos]
         salida = [
             {"idPersona": k, "segmento": dict(p["segmento"]), "edad": p.get("edad")}
-            for k, p in sorted(universo) if self._pasa(p, filtros, ref_estudio)
+            for k, p in sorted(universo) if self._pasa(p, filtros)
         ]
         return salida[:limite]
 
     def _consiente(self, id_persona):
-        p = self.personas.get(str(id_persona))
-        return bool(p and p.get("consiente", True))
+        return self._en_la_vista(self.personas.get(str(id_persona)))
 
     def declarar_convocatoria(self, id_persona, referencia, vence_en):
         if self.falla:
@@ -402,7 +405,7 @@ class BovedaMemoria(Boveda):
         if self.falla:
             raise ServicioNoDisponible(self.falla)
         p = self.personas.get(str(id_persona))
-        if not p or not p.get("consiente", True):
+        if not self._en_la_vista(p):
             raise ContactoRechazado(
                 f"La bóveda no entregó el contacto: la persona {id_persona} no "
                 "tiene consentimiento vigente de contacto_participacion, o ya no "

@@ -67,7 +67,7 @@ def proponer(ctx, actor, sesion_id, cuerpo):
     if not propuestos:
         filtros = {d: [perdido["segmento"].get(d)] for d in dims if perdido["segmento"].get(d)}
         en_sesion = {c["idPersona"] for c in convs}
-        base = [b for b in ctx.boveda.convocables(filtros, ref_estudio=sesion.get("refEstudio"), limite=200)
+        base = [b for b in ctx.boveda.convocables(filtros, limite=200)
                 if b["idPersona"] not in en_sesion]
         hists = ctx.store.get_many([historial.ruta(b["idPersona"]) for b in base])
         cfg = configuracion.fatiga(ctx.store)
@@ -157,7 +157,7 @@ def _reemplazar(ctx, actor, sesion_id, cuerpo):
         # Del panel: entra por el mismo camino que cualquier candidato (gate de
         # la vista, fatiga, un estudio por persona) y queda invitado.
         vigentes = {b["idPersona"]: b for b in ctx.boveda.convocables(
-            ids=[reemplazo_id], ref_estudio=sesion.get("refEstudio"))}
+            ids=[reemplazo_id])}
         if reemplazo_id not in vigentes:
             raise Conflicto("Esa persona no tiene consentimiento vigente de contacto: no se puede convocar.")
         rompe = _diferencias(vigentes[reemplazo_id]["segmento"], perdido["segmento"], dims)

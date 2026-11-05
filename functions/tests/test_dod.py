@@ -107,6 +107,28 @@ def test_nadie_sin_consentimiento_aparece_ni_entra(api, ctx, sesion):
         ctx.bov.contacto(sin[0], "celular", "coordinadora@equipos.com.uy")
 
 
+def test_consentimiento_de_ambito_estudio_no_entra_ni_para_su_estudio(api, ctx, sesion):
+    """`boveda/0021`: `finalidades` solo lista consentimientos con `ref_estudio
+    is null`. Un contacto_participacion de ámbito estudio no habilita a nadie,
+    tampoco en el estudio que lo otorgó: el doble no puede ser más generoso que
+    la vista, o las pruebas pasan y producción no."""
+    pid = fabrica.id_de(1)
+    ctx.bov.personas[pid]["refEstudio"] = sesion["estudio"]["refEstudio"]
+    assert pid not in {b["idPersona"] for b in ctx.bov.convocables()}
+    assert ctx.bov.convocables(ids=[pid]) == []
+    r = api("POST", f"/cuali/sesiones/{sesion['id']}/candidatos",
+            {"modo": "demografica", "filtros": {}, "limite": 500})
+    assert pid not in {c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]}
+    res = api("POST", f"/cuali/sesiones/{sesion['id']}/convocatorias", {"candidatos": [pid]})
+    assert res["incorporados"] == [] and res["sinConsentimientoVigente"] == [pid]
+    # Las funciones de la 0016 preguntan a la misma vista.
+    from coloquio.errores import ConvocatoriaRechazada
+    with pytest.raises(ConvocatoriaRechazada):
+        ctx.bov.declarar_convocatoria(pid, sesion["id"], ctx.ahora() + dt.timedelta(days=5))
+    with pytest.raises(ContactoRechazado):
+        ctx.bov.contacto(pid, "celular", "coordinadora@equipos.com.uy")
+
+
 # ── 4 · Filtro de fatiga con anulación registrada ──────────────────
 
 def test_fatiga_excluye_y_la_anulacion_queda_registrada(api, ctx, sesion):

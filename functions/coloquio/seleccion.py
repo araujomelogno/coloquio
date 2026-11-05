@@ -93,7 +93,7 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
     if ranking:
         por_id = {r["idPersona"]: r for r in ranking}
         base = ctx.boveda.convocables(
-            filtros, ids=list(por_id), ref_estudio=sesion.get("refEstudio"), limite=LIMITE_MAXIMO)
+            filtros, ids=list(por_id), limite=LIMITE_MAXIMO)
         base = [b for b in base if b["idPersona"] in por_id]
         for b in base:
             r = por_id[b["idPersona"]]
@@ -102,7 +102,7 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
         base.sort(key=lambda b: b.get("rango") or 10 ** 9)
         descartados_gate = len(por_id) - len(base)
     else:
-        base = ctx.boveda.convocables(filtros, ref_estudio=sesion.get("refEstudio"), limite=limite)
+        base = ctx.boveda.convocables(filtros, limite=limite)
         descartados_gate = 0
 
     # 2 · Historial y fatiga, por lectura puntual (la cláusula `in` está topeada).
@@ -163,7 +163,7 @@ def incorporar(ctx, actor, sesion_id, cuerpo):
     sesiones.exigir_abierta(sesion)
 
     vigentes = {b["idPersona"]: b for b in ctx.boveda.convocables(
-        ids=list(por_id), ref_estudio=sesion.get("refEstudio"), limite=LIMITE_MAXIMO)}
+        ids=list(por_id), limite=LIMITE_MAXIMO)}
     sin_gate = [i for i in por_id if i not in vigentes]
     cfg_fatiga = configuracion.fatiga(ctx.store)
     ahora = ctx.ahora()
