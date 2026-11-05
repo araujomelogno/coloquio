@@ -173,9 +173,9 @@ await p.goto(`${BASE}/#/sesiones/${S}/seleccion`); await p.waitForSelector('#bus
 await p.click('#modo label:has(input[value=mixta])');
 await p.click('.seg label:has(input[name=tramoEtario][value="25-34"])');
 await p.click('.seg label:has(input[name=tramoEtario][value="35-44"])');
-await p.fill('#f-crit', 'toma cerveza artesanal con amigos');
+await p.fill('.crit-texto', 'toma cerveza artesanal con amigos');
 await captura(p, 'seleccion-consulta', { elemento: '.card' });
-await p.click('#buscar'); await p.waitForSelector('text=ranking semántico'); await esperar(p);
+await p.click('#buscar'); await p.waitForSelector('text=modo laxo'); await esperar(p);
 await captura(p, 'seleccion-mixta');
 await p.click('#modo label:has(input[value=demografica])');
 await p.click('#buscar'); await p.waitForSelector('text=demográfica pura'); await esperar(p);

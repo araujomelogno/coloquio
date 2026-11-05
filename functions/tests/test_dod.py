@@ -107,6 +107,28 @@ def test_nadie_sin_consentimiento_aparece_ni_entra(api, ctx, sesion):
         ctx.bov.contacto(sin[0], "celular", "coordinadora@equipos.com.uy")
 
 
+def test_consentimiento_de_ambito_estudio_no_entra_ni_para_su_estudio(api, ctx, sesion):
+    """`boveda/0021`: `finalidades` solo lista consentimientos con `ref_estudio
+    is null`. Un contacto_participacion de ámbito estudio no habilita a nadie,
+    tampoco en el estudio que lo otorgó: el doble no puede ser más generoso que
+    la vista, o las pruebas pasan y producción no."""
+    pid = fabrica.id_de(1)
+    ctx.bov.personas[pid]["refEstudio"] = sesion["estudio"]["refEstudio"]
+    assert pid not in {b["idPersona"] for b in ctx.bov.convocables()}
+    assert ctx.bov.convocables(ids=[pid]) == []
+    r = api("POST", f"/cuali/sesiones/{sesion['id']}/candidatos",
+            {"modo": "demografica", "filtros": {}, "limite": 500})
+    assert pid not in {c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]}
+    res = api("POST", f"/cuali/sesiones/{sesion['id']}/convocatorias", {"candidatos": [pid]})
+    assert res["incorporados"] == [] and res["sinConsentimientoVigente"] == [pid]
+    # Las funciones de la 0016 preguntan a la misma vista.
+    from coloquio.errores import ConvocatoriaRechazada
+    with pytest.raises(ConvocatoriaRechazada):
+        ctx.bov.declarar_convocatoria(pid, sesion["id"], ctx.ahora() + dt.timedelta(days=5))
+    with pytest.raises(ContactoRechazado):
+        ctx.bov.contacto(pid, "celular", "coordinadora@equipos.com.uy")
+
+
 # ── 4 · Filtro de fatiga con anulación registrada ──────────────────
 
 def test_fatiga_excluye_y_la_anulacion_queda_registrada(api, ctx, sesion):
@@ -482,3 +504,245 @@ def test_contacto_exige_actor_humano(ctx):
 
 def test_ahora_fijo(ctx):
     assert ctx.ahora() == dt.datetime(2026, 10, 1, 12, 0, tzinfo=dt.timezone.utc)
+
+
+# ── R1.18 · Modo laxo y detalle de cumplimiento del criterio semántico ─
+
+def _semantica(api, sid, criterios, **extra):
+    return api("POST", f"/cuali/sesiones/{sid}/candidatos",
+               {"modo": "semantica", "criterios": criterios, "limite": 500, **extra})
+
+
+def _frase(ctx, pid):
+    return ctx.motor.corpus[pid][0]["texto"]
+
+
+def test_r118_sin_modo_corre_en_laxo_y_lo_dice(api, ctx, sesion):
+    r = _semantica(api, sesion["id"], ["cerveza artesanal amigos"])
+    assert ctx.motor.ultima["modo"] == "laxo"  # explícito: el default de paneles es estricto
+    assert r["modoSemantico"] == "laxo"
+    # Cada criterio semántico viaja con su `duro`.
+    semanticos = [c for c in ctx.motor.ultima["criterios"] if c["tipo"] == "semantico"]
+    assert semanticos == [{"tipo": "semantico", "texto": "cerveza artesanal amigos", "duro": False}]
+    # Laxo: los dudosos están, marcados (antes desaparecían en silencio).
+    assert any(c["penalizado"] for c in r["candidatos"])
+    assert r["calidad"]["penalizados"] == sum(1 for c in r["candidatos"] if c["penalizado"])
+    # Una demográfica no tiene modo semántico que mostrar.
+    d = api("POST", f"/cuali/sesiones/{sesion['id']}/candidatos", {"modo": "demografica"})
+    assert d["modoSemantico"] is None and d["calidad"] is None
+    # `paneles` caído: degrada a demográfica pura (sin cambios) y no se
+    # atribuye un modo a una lista que el motor no tocó.
+    ctx.motor.falla = "paneles no responde"
+    caido = _semantica(api, sesion["id"], ["cerveza"])
+    assert caido["candidatos"] and caido["modoSemantico"] is None
+    assert "paneles no responde" in caido["degradaciones"][0]["motivo"]
+
+
+def test_r118_modo_semantico_invalido_se_rechaza(api, sesion):
+    from coloquio.errores import DatosInvalidos
+    with pytest.raises(DatosInvalidos, match="Modo semántico"):
+        _semantica(api, sesion["id"], ["cerveza"], modoSemantico="mas_o_menos")
+
+
+def test_r118_criterio_duro_en_laxo_deja_afuera_igual(api, ctx, sesion):
+    sid = sesion["id"]
+    blando = _semantica(api, sid, ["cerveza artesanal amigos", "vino tinto comidas"])
+    assert blando["modoSemantico"] == "laxo"
+    # Sin `duro`, quien solo habla de cerveza entra penalizado (sin evidencia de vino).
+    assert any("vino" not in _frase(ctx, c["idPersona"]) for c in blando["candidatos"])
+
+    duro = _semantica(api, sid, ["cerveza artesanal amigos", {"texto": "vino tinto comidas", "duro": True}])
+    assert duro["modoSemantico"] == "laxo"
+    assert {"tipo": "semantico", "texto": "vino tinto comidas", "duro": True} in ctx.motor.ultima["criterios"]
+    assert duro["candidatos"] and all("vino" in _frase(ctx, c["idPersona"]) for c in duro["candidatos"])
+    assert duro["excluidosSemanticos"]["porMotivo"]["sin_evidencia"] > 0
+
+    # Un dudoso en el criterio duro también queda afuera en laxo; sin `duro`, entra marcado.
+    vino = duro["candidatos"][0]["idPersona"]
+    ctx.motor.veredictos[vino] = "dudoso"
+    r = _semantica(api, sid, [{"texto": "vino tinto comidas", "duro": True}])
+    assert vino not in {c["idPersona"] for c in r["candidatos"]}
+    assert r["excluidosSemanticos"]["porMotivo"]["dudoso"] >= 1
+    r = _semantica(api, sid, ["vino tinto comidas"])
+    assert next(c for c in r["candidatos"] if c["idPersona"] == vino)["penalizado"] is True
+    # Y `no_cumple` deja afuera en los dos modos, duro o no.
+    ctx.motor.veredictos[vino] = "no_cumple"
+    r = _semantica(api, sid, ["vino tinto comidas"])
+    assert vino not in {c["idPersona"] for c in r["candidatos"]}
+    assert r["excluidosSemanticos"]["porMotivo"]["no_cumple"] == 1
+
+
+def test_r118_estricto_informa_excluidos_por_motivo(api, ctx, sesion):
+    sid = sesion["id"]
+    industrial = [pid for pid, rs in ctx.motor.corpus.items() if "industrial" in rs[0]["texto"]]
+    artesanal = [pid for pid, rs in ctx.motor.corpus.items() if "artesanal" in rs[0]["texto"]]
+    ctx.motor.veredictos[artesanal[0]] = "no_cumple"
+    r = _semantica(api, sid, ["cerveza artesanal amigos"], modoSemantico="estricto")
+    assert ctx.motor.ultima["modo"] == "estricto" and r["modoSemantico"] == "estricto"
+    ex = r["excluidosSemanticos"]
+    assert ex["porMotivo"] == {"no_cumple": 1, "dudoso": len(industrial), "sin_evidencia": 0}
+    assert ex["total"] == 1 + len(industrial)
+    assert r["candidatos"] and not any(c["penalizado"] for c in r["candidatos"])
+    assert not {c["idPersona"] for c in r["candidatos"]} & set(industrial)
+
+
+def test_r118_estricto_que_vacia_no_cae_a_demografica(api, ctx, sesion):
+    """Si el estricto deja afuera a todos, la lista queda vacía y lo dice:
+    caer a demográfica pura metería a los que el modo acaba de excluir."""
+    r = _semantica(api, sesion["id"], ["cerveza artesanal amigos", "vino tinto comidas"],
+                   modoSemantico="estricto")
+    assert r["candidatos"] == [] and r["modoSemantico"] == "estricto"
+    ex = r["excluidosSemanticos"]
+    # Nadie habla de cerveza y de vino a la vez: todos afuera, por el primer
+    # motivo que encontró (`dudoso` en el primer criterio le gana a la falta de
+    # evidencia en el segundo, como en `paneles`).
+    assert ex["total"] == len(ctx.motor.corpus) - sum(  # todos los que el recall encontró
+        1 for rs in ctx.motor.corpus.values() if "mate" in rs[0]["texto"] or "azucaradas" in rs[0]["texto"])
+    assert sum(ex["porMotivo"].values()) == ex["total"]
+    assert ex["porMotivo"]["sin_evidencia"] > 0 and ex["porMotivo"]["dudoso"] > 0
+    assert "estricto" in r["degradaciones"][-1]["motivo"]
+
+
+def test_r118_dudoso_aparece_marcado_con_razon_y_evidencia(api, ctx, sesion):
+    r = _semantica(api, sesion["id"], ["cerveza artesanal amigos"])
+    dudoso = next(c for c in r["candidatos"] if "industrial" in _frase(ctx, c["idPersona"]))
+    assert dudoso["penalizado"] is True and dudoso["confianzaBaja"] is True
+    assert dudoso["verificacionIncompleta"] is False
+    ev = dudoso["evidencia"][0]
+    assert ev["veredicto"] == "dudoso" and ev["razon"]
+    assert "industrial" in ev["respuesta"] and ev["estudio"] and ev["pregunta"]
+    # El verificado, en cambio, entra limpio.
+    bueno = next(c for c in r["candidatos"] if "artesanal" in _frase(ctx, c["idPersona"]))
+    assert not (bueno["penalizado"] or bueno["confianzaBaja"] or bueno["verificacionIncompleta"])
+
+
+def test_r118_verificacion_caida_no_es_dudoso(api, ctx, sesion):
+    ctx.motor.verificacion_caida = True
+    for modo in ("laxo", "estricto"):  # sin_verificar entra en los dos modos
+        r = _semantica(api, sesion["id"], ["cerveza artesanal amigos"], modoSemantico=modo)
+        assert r["candidatos"] and r["excluidosSemanticos"]["total"] == 0
+        for c in r["candidatos"]:
+            assert c["verificacionIncompleta"] is True and c["confianzaBaja"] is True
+            assert c["penalizado"] is False  # nadie juzgó la evidencia: no es haber dudado
+            assert {e["veredicto"] for e in c["evidencia"]} == {"sin_verificar"}
+        assert r["calidad"]["sinVerificar"] == len(r["candidatos"])
+        assert r["calidad"]["penalizados"] == 0
+
+
+def test_r118_normalizar_no_descarta_lo_que_manda_paneles(monkeypatch):
+    """El camino de producción: el cuerpo que sale a `POST /api/consultas` y
+    la respuesta cruda de `paneles` (forma de `consultas._combinar`)."""
+    import io
+    import json
+
+    from coloquio import motor
+
+    crudo = {
+        "modo": "estricto",
+        "items": [{
+            "id_persona": "p1", "estado": "pendiente", "puntaje": 0.7, "confianza": "baja",
+            "penalizado": False, "verificacion_incompleta": True,
+            "criterios": [
+                {"tipo": "demografico", "criterio": "sexo", "veredicto": "cumple"},
+                {"tipo": "semantico", "criterio": "toma cerveza", "veredicto": "sin_verificar",
+                 "estado": "pendiente", "razon": "verificador caído",
+                 "evidencia": {"valor_texto": "Tomo cerveza", "pregunta_texto": "¿Qué toma?",
+                               "estudio": "Hábitos 2025", "fecha_campo": "2025-11-01"}}],
+        }],
+        "excluidos": [
+            {"id_persona": "x1", "estado": "descartada", "criterio": "c", "motivo": "no_cumple"},
+            {"id_persona": "x2", "estado": "descartada", "criterio": "c", "motivo": "dudoso"},
+            {"id_persona": "x3", "estado": "descartada", "criterio": "c", "motivo": "sin_evidencia"},
+            {"id_persona": "x4", "estado": "descartada", "criterio": "c", "motivo": "irrelevante"},
+            {"id_persona": "x5", "estado": "descartada", "criterio": "c",
+             "motivo": "sin_evidencia_pertinente"},
+        ],
+        "degradaciones": [],
+    }
+    enviado = {}
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def urlopen(pedido, timeout=None):
+        enviado.update(json.loads(pedido.data.decode("utf-8")))
+        return Resp(json.dumps(crudo).encode("utf-8"))
+
+    monkeypatch.setattr(motor.urllib.request, "urlopen", urlopen)
+    r = motor.MotorPanelesHttp("https://paneles.test/api").consultar(
+        {"sexo": ["F"]}, [{"texto": "toma cerveza", "duro": True}, "vino"], "tok", modo="estricto")
+    assert enviado["modo"] == "estricto"
+    assert [c.get("duro") for c in enviado["criterios"] if c["tipo"] == "semantico"] == [True, False]
+    assert not any("peso" in c or "umbral_distancia" in c for c in enviado["criterios"])
+    item = r["items"][0]
+    assert item["verificacionIncompleta"] is True and item["penalizado"] is False
+    assert item["confianzaBaja"] is True and item["estado"] == "pendiente"
+    assert item["evidencia"] == [{"criterio": "toma cerveza", "veredicto": "sin_verificar",
+                                  "estado": "pendiente", "razon": "verificador caído",
+                                  "respuesta": "Tomo cerveza", "pregunta": "¿Qué toma?",
+                                  "estudio": "Hábitos 2025", "fechaCampo": "2025-11-01"}]
+    assert r["modo"] == "estricto"
+    assert r["excluidos"] == {"total": 5, "porMotivo": {"no_cumple": 1, "dudoso": 1, "sin_evidencia": 3}}
+    # Un campo ausente no se lee a favor (contrato v2 de paneles).
+    sin_marcas = motor.normalizar_resultado({"items": [{"id_persona": "p", "criterios": [
+        {"tipo": "semantico", "veredicto": "dudoso"}]}]})["items"][0]
+    assert sin_marcas["penalizado"] is True and sin_marcas["confianzaBaja"] is True
+
+
+def _incorporar_con_marcas(api, sid, flojos=None, verificados=None):
+    """Lista de espera con 25-34 y 35-44. Entran penalizados los primeros
+    `flojos` en el orden de la lista (para que el desempate viejo los
+    prefiriera), o todos menos los últimos `verificados`."""
+    sel = api("POST", f"/cuali/sesiones/{sid}/candidatos",
+              {"modo": "demografica", "filtros": {"tramoEtario": ["25-34", "35-44"]}})
+    ids = [c["idPersona"] for c in sel["candidatos"]]
+    corte = flojos if flojos is not None else len(ids) - verificados
+    pedidos = [{"idPersona": i, "penalizado": True, "confianzaBaja": True} if n < corte
+               else {"idPersona": i} for n, i in enumerate(ids)]
+    api("POST", f"/cuali/sesiones/{sid}/convocatorias", {"candidatos": pedidos})
+    return ids[:corte], ids[corte:]
+
+
+def test_r118_propuesta_no_usa_penalizados_si_hay_verificados(api, ctx, sesion):
+    from coloquio import embudo, sesiones as mod_sesiones
+
+    sid = sesion["id"]
+    flojos, verificados = _incorporar_con_marcas(api, sid, 15)
+    assert _conv(api, sid, flojos[0])["marcasEvidencia"] == ["penalizado", "confianzaBaja"]
+    assert _conv(api, sid, verificados[0])["marcasEvidencia"] == []
+    p = api("GET", f"/cuali/sesiones/{sid}/invitacion")
+    assert len(p["propuestos"]) == p["metaInvitacionTotal"] and not p["deficitRestante"]
+    assert not set(p["propuestos"]) & set(flojos)
+    assert p["conEvidenciaFloja"] == [] and p["avisos"] == []
+    # La prueba no es trivial: sin las marcas, la misma lista los habría elegido.
+    s = mod_sesiones.exigir(ctx.store, sid)
+    convs = [{**c, "marcasEvidencia": []} for c in embudo.convocatorias(ctx.store, sid)]
+    assert set(mod_sesiones.proponer_invitacion(s, convs)["propuestos"]) & set(flojos)
+
+
+def test_r118_propuesta_recurre_a_penalizados_y_lo_dice(api, sesion):
+    sid = sesion["id"]
+    flojos, verificados = _incorporar_con_marcas(api, sid, verificados=3)
+    p = api("GET", f"/cuali/sesiones/{sid}/invitacion")
+    assert set(p["propuestos"][:3]) == set(verificados)  # primero los verificados
+    assert p["conEvidenciaFloja"] and set(p["conEvidenciaFloja"]) <= set(flojos)
+    assert p["avisos"][0]["tipo"] == "evidencia_floja"
+    assert str(len(p["conEvidenciaFloja"])) in p["avisos"][0]["mensaje"]
+
+
+def test_r118_reemplazo_ofrece_primero_verificados(api, ctx, sesion):
+    sid = sesion["id"]
+    flojos, _ = _incorporar_con_marcas(api, sid, 15)
+    propuesta = api("GET", f"/cuali/sesiones/{sid}/invitacion")
+    api("POST", f"/cuali/sesiones/{sid}/invitacion", {"ids": propuesta["propuestos"]})
+    caido = propuesta["propuestos"][0]
+    _confirmar(api, sid, caido)
+    api("PATCH", f"/cuali/convocatorias/{sid}/{caido}", {"a": "se_cayo"})
+    p = api("POST", f"/cuali/sesiones/{sid}/reemplazo", {"idPersona": caido})
+    marcas = [c["evidenciaFloja"] for c in p["propuestos"]]
+    assert marcas == sorted(marcas)  # los verificados, antes
+    assert any(c["idPersona"] in flojos and c["marcasEvidencia"] for c in p["propuestos"] + p["parciales"])

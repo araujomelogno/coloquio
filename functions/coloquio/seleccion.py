@@ -21,15 +21,24 @@ El cruce entre los dos mundos (SPEC §7.3):
   la fase viene a eliminar.
 * La fatiga **excluye** (R1.3). Los excluidos se devuelven aparte, con el
   motivo, y solo entran al embudo con una anulación registrada.
+* **Modo laxo o estricto, por consulta (R1.18).** Por defecto, laxo: quien
+  tiene evidencia dudosa o ausente entra **marcado** (`penalizado`,
+  `confianzaBaja`), en vez de desaparecer. Cada criterio puede ser `duro`
+  (filtra en los dos modos). La respuesta dice qué modo se usó y, siempre,
+  cuántos dejó afuera el motor y por qué (`excluidosSemanticos`).
 """
 
 from . import (
     configuracion, embudo, historial, modelo, sesiones, util,
 )
 from .errores import DatosInvalidos, NoEncontrado, RequiereAnulacion
-from .motor import ErrorMotor
+from .motor import MODO_POR_DEFECTO, MODOS as MODOS_SEMANTICOS, ErrorMotor, normalizar_criterios
 
 MODOS = ("demografica", "semantica", "mixta")
+
+# R1.18 — las marcas de calidad de evidencia que viajan con un candidato hasta
+# el embudo, para que la propuesta de invitación no complete cuota con ellos.
+MARCAS_EVIDENCIA = ("penalizado", "verificacionIncompleta", "confianzaBaja")
 LIMITE_MAXIMO = 500
 
 
@@ -55,9 +64,13 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
     if modo not in MODOS:
         raise DatosInvalidos(f"Modo desconocido: {modo!r}.", {"modos": list(MODOS)})
     filtros = _filtros(cuerpo)
-    textos = [t.strip() for t in (cuerpo.get("criterios") or []) if str(t).strip()]
+    criterios = normalizar_criterios(cuerpo.get("criterios"))
+    modo_semantico = str(cuerpo.get("modoSemantico") or MODO_POR_DEFECTO).strip().lower()
+    if modo_semantico not in MODOS_SEMANTICOS:
+        raise DatosInvalidos(f"Modo semántico desconocido: {modo_semantico!r}.",
+                             {"modosSemanticos": list(MODOS_SEMANTICOS)})
     limite = util.entero(cuerpo.get("limite"), "limite", 1, LIMITE_MAXIMO, por_defecto=200)
-    if modo in ("semantica", "mixta") and not textos:
+    if modo in ("semantica", "mixta") and not criterios:
         raise DatosInvalidos("Una selección semántica o mixta necesita al menos un criterio en texto.")
     if modo == "mixta" and not filtros:
         raise DatosInvalidos("Una selección mixta necesita algún criterio demográfico.")
@@ -65,15 +78,34 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
     degradaciones = []
     abrio_semantica = False
     ranking = None
+    excluidos_semanticos = None
+    modo_usado = None
+    vaciado_por_el_modo = False
 
     if modo != "demografica":
         abrio_semantica = True
         try:
             resultado = ctx.motor.consultar(
-                filtros if modo == "mixta" else {}, textos, actor.token, limite=limite)
+                filtros if modo == "mixta" else {}, criterios, actor.token, limite=limite,
+                modo=modo_semantico)
             ranking = resultado["items"]
+            modo_usado = resultado.get("modo") or modo_semantico
+            excluidos_semanticos = resultado.get("excluidos")
             degradaciones.extend(resultado.get("degradaciones") or [])
-            if not ranking:
+            if not ranking and (excluidos_semanticos or {}).get("total"):
+                # El motor encontró gente y la dejó afuera (modo estricto o un
+                # criterio duro). Caer a demográfica pura metería por la
+                # ventana a quienes el modo acaba de excluir: la lista queda
+                # vacía y se dice por qué.
+                vaciado_por_el_modo = True
+                degradaciones.append({
+                    "etapa": "semantica",
+                    "motivo": (f"El motor dejó afuera a los {excluidos_semanticos['total']} "
+                               f"candidatos que encontró (modo {modo_usado})."),
+                    "consecuencia": ("No hay candidatos. Probá en modo laxo o sin marcar "
+                                     "criterios como duros."),
+                })
+            elif not ranking:
                 degradaciones.append({
                     "etapa": "semantica",
                     "motivo": ("El motor no encontró contenido embebido que se acerque "
@@ -90,19 +122,23 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
             ranking = None
 
     # 1 · La vista. Con ranking, restringida a sus ids: el gate lo pone la bóveda.
-    if ranking:
+    if vaciado_por_el_modo:
+        base, descartados_gate = [], 0
+    elif ranking:
         por_id = {r["idPersona"]: r for r in ranking}
         base = ctx.boveda.convocables(
-            filtros, ids=list(por_id), ref_estudio=sesion.get("refEstudio"), limite=LIMITE_MAXIMO)
+            filtros, ids=list(por_id), limite=LIMITE_MAXIMO)
         base = [b for b in base if b["idPersona"] in por_id]
         for b in base:
             r = por_id[b["idPersona"]]
             b.update({"puntaje": r.get("puntaje"), "confianza": r.get("confianza"),
-                      "rango": r.get("rango"), "evidencia": r.get("evidencia") or []})
+                      "estado": r.get("estado"),
+                      "rango": r.get("rango"), "evidencia": r.get("evidencia") or [],
+                      **{m: bool(r.get(m)) for m in MARCAS_EVIDENCIA}})
         base.sort(key=lambda b: b.get("rango") or 10 ** 9)
         descartados_gate = len(por_id) - len(base)
     else:
-        base = ctx.boveda.convocables(filtros, ref_estudio=sesion.get("refEstudio"), limite=limite)
+        base = ctx.boveda.convocables(filtros, limite=limite)
         descartados_gate = 0
 
     # 2 · Historial y fatiga, por lectura puntual (la cláusula `in` está topeada).
@@ -131,8 +167,14 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
     return {
         "modo": modo,
         "abrioSemantica": abrio_semantica,
+        # R1.18 — el modo con que el motor combinó los criterios. `None` si
+        # no hubo ranking semántico (demográfica pura o motor caído): no se
+        # puede decir «laxo» de una lista que el motor no tocó.
+        "modoSemantico": modo_usado,
+        "excluidosSemanticos": excluidos_semanticos,
+        "calidad": _calidad(candidatos) if modo_usado else None,
         "filtros": filtros,
-        "criterios": textos,
+        "criterios": criterios,
         "total": len(candidatos),
         "candidatos": candidatos,
         "excluidosPorFatiga": excluidos,
@@ -142,6 +184,25 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
         "avisosCuota": sesiones.avisos_de_disponibilidad(sesion, seleccionables, ya_en_sesion),
         "cuota": sesiones.estado_de_cuota(sesion, ya_en_sesion),
     }
+
+
+def _calidad(candidatos):
+    """El pie de la lista: «187 candidatos · 23 penalizados · 4 sin verificar»."""
+    return {
+        "penalizados": sum(1 for c in candidatos if c.get("penalizado")),
+        "sinVerificar": sum(1 for c in candidatos if c.get("verificacionIncompleta")),
+        "confianzaBaja": sum(1 for c in candidatos if c.get("confianzaBaja")),
+    }
+
+
+def marcas_evidencia(pedido):
+    """Las marcas R1.18 que manda la lista, reducidas a la lista blanca.
+
+    Solo nombres de marca, nunca texto: la evidencia (la respuesta textual)
+    no se guarda en el embudo. Viajan desde el cliente igual que `puntaje`:
+    son lo que el coordinador vio al elegir.
+    """
+    return [m for m in MARCAS_EVIDENCIA if (pedido or {}).get(m) is True]
 
 
 def incorporar(ctx, actor, sesion_id, cuerpo):
@@ -163,7 +224,7 @@ def incorporar(ctx, actor, sesion_id, cuerpo):
     sesiones.exigir_abierta(sesion)
 
     vigentes = {b["idPersona"]: b for b in ctx.boveda.convocables(
-        ids=list(por_id), ref_estudio=sesion.get("refEstudio"), limite=LIMITE_MAXIMO)}
+        ids=list(por_id), limite=LIMITE_MAXIMO)}
     sin_gate = [i for i in por_id if i not in vigentes]
     cfg_fatiga = configuracion.fatiga(ctx.store)
     ahora = ctx.ahora()
@@ -223,7 +284,8 @@ def _incorporar_tx(ctx, actor, sesion_id, por_id, vigentes, sin_gate, motivo_gen
             orden += 1
             conv = embudo.nueva(i, vigentes[i]["segmento"], orden, actor.uid, ahora,
                                 anulacion=anulacion, es_reemplazo_de=es_reemplazo_de,
-                                puntaje=por_id[i].get("puntaje"))
+                                puntaje=por_id[i].get("puntaje"),
+                                marcas_evidencia=marcas_evidencia(por_id[i]))
             embudo.contar_alta(sesion, conv)
             if anulacion:
                 embudo._sumar(sesion, "anulacionesFatiga")

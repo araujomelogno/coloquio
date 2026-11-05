@@ -279,9 +279,16 @@
   </table>
   <ol class="pasos">
     <li>En la pestaña <strong>Selección</strong>, elegí el modo arriba a la derecha.</li>
-    <li>Marcá los filtros demográficos. En semántica o mixta, escribí uno o más criterios, uno por línea.</li>
+    <li>Marcá los filtros demográficos. En semántica o mixta, escribí un criterio; con <strong>+ agregar criterio</strong> sumás otro.</li>
+    <li>Si un criterio es imprescindible, marcalo <strong>duro</strong>: quien no lo cumple queda afuera. Sin marcar, el criterio <strong>ordena</strong> pero no deja a nadie afuera por sí solo.</li>
+    <li>Elegí el <strong>modo</strong>: <strong>laxo</strong> (el que viene marcado) o <strong>estricto</strong>.</li>
     <li>Tocá <strong>Buscar candidatos</strong>.</li>
   </ol>
+  <table>
+    <tr><td class="destacado">Laxo</td><td>Quien tiene evidencia dudosa, o ninguna para algún criterio, <strong>entra a la lista marcado ⚠</strong>. Es el modo por defecto: vos vas a llamar y hacer el filtro de admisión, y un dudoso que no aparece puede costarte el grupo.</td></tr>
+    <tr><td class="destacado">Estricto</td><td>Esas personas quedan afuera, y un cartel dice <strong>cuántas y por qué</strong>: no cumplen, dudosas o sin evidencia. Si el estricto deja la lista vacía, no se rellena con una búsqueda demográfica: probá en laxo.</td></tr>
+  </table>
+  <p>En los dos modos, quien la evidencia contradice («no cumple») queda afuera.</p>
   <figure><img class="recorte" src="capturas/10-seleccion-consulta.jpg" />
     <figcaption><b>Consulta mixta.</b> Mujeres y hombres de 25 a 44 que hablaron de cerveza artesanal.</figcaption></figure>
 
@@ -297,13 +304,22 @@
   <ul class="puntos">
     <li>su <strong>código</strong> y su <strong>segmento</strong>;</li>
     <li>en semántica o mixta, su <strong>posición en el ranking</strong> y la
-    <strong>evidencia</strong>: la respuesta que lo trajo, de qué estudio y a qué
-    pregunta. Así podés defender la selección ante el cliente;</li>
+    <strong>evidencia</strong> de cada criterio: el veredicto, la razón del
+    verificador, la respuesta que lo trajo, de qué estudio y a qué pregunta. Así
+    podés defender la selección ante el cliente;</li>
+    <li>si entró con evidencia floja, una marca que se ve sin abrir nada:
+    <strong>⚠ penalizado</strong> (alguna evidencia es dudosa o falta) o
+    <strong>⚠ confianza baja</strong>, en ámbar; o <strong>verificación
+    incompleta</strong>, en celeste, cuando el verificador no llegó a juzgar su
+    evidencia. Celeste no es dudoso: nadie dudó, nadie miró;</li>
     <li>su <strong>historial cualitativo</strong> (🗂): cuántas veces participó y
     cuándo fue la última. Si tocás el chip, ves el detalle.</li>
   </ul>
   <figure><img class="recorte" src="capturas/11-seleccion-mixta.jpg" />
-    <figcaption><b>Resultados de una consulta mixta.</b> A la derecha, el estado de la cuota de la sesión.</figcaption></figure>
+    <figcaption><b>Resultados de una consulta mixta.</b> Arriba, el modo y cuántos entraron penalizados. A la derecha, el estado de la cuota de la sesión.</figcaption></figure>
+  <p>El título de la lista dice siempre con qué modo se buscó —«modo laxo · 53
+  candidatos · 12 penalizados»—: un número de candidatos sin el modo al lado no
+  se puede interpretar.</p>
 
   <div class="aviso">
     <div class="t">Si el ranking semántico no está disponible</div>
@@ -380,8 +396,10 @@
   <p>Con la lista de espera armada, tocá <strong>Proponer lista de
   invitación</strong> en Selección. El sistema elige de la lista de espera a quién
   invitar para <strong>cumplir cada cuota asumiendo la caída</strong>. Si para algún
-  segmento no alcanza, lo dice en vez de completar con cualquiera. Elegí el canal
-  inicial y tocá <strong>Invitar</strong>.</p>
+  segmento no alcanza, lo dice en vez de completar con cualquiera. Tampoco
+  completa con candidatos <strong>penalizados o de confianza baja</strong>
+  mientras haya verificados que sirvan; si tiene que usarlos, un cartel lo avisa
+  y la fila queda marcada. Elegí el canal inicial y tocá <strong>Invitar</strong>.</p>
   <figure><img class="recorte" src="capturas/15-invitacion-propuesta.jpg" />
     <figcaption><b>Lista de invitación propuesta.</b> Arriba, el supuesto: se invita a 12 para sentar 8.</figcaption></figure>
 
