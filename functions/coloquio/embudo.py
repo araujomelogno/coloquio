@@ -31,7 +31,7 @@ def ruta(sesion_id, id_persona):
 
 
 def nueva(id_persona, segmento, orden, actor_uid, ahora, canal="manual",
-          anulacion=None, es_reemplazo_de=None, puntaje=None):
+          anulacion=None, es_reemplazo_de=None, puntaje=None, marcas_evidencia=None):
     return {
         "idPersona": id_persona,
         "estado": modelo.CANDIDATO,
@@ -41,6 +41,10 @@ def nueva(id_persona, segmento, orden, actor_uid, ahora, canal="manual",
         "esReemplazoDe": es_reemplazo_de,
         "anulacion": anulacion,
         "puntaje": puntaje,
+        # R1.18 — con qué calidad de evidencia entró (`penalizado`,
+        # `verificacionIncompleta`, `confianzaBaja`). Vacío: verificado, o
+        # elegido sin criterio semántico.
+        "marcasEvidencia": list(marcas_evidencia or []),
         "requiereReemplazo": False,
         "creadaEn": ahora,
         "eventos": [{"de": None, "a": modelo.CANDIDATO, "canal": canal,

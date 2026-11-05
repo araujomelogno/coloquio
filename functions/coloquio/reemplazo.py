@@ -11,6 +11,9 @@
   incompleta. La elegida queda registrada con usuario y hora. Nunca se propone
   un reemplazo que rompe la cuota sin decirlo: si se elige uno que no
   coincide, hay que aceptarlo explícitamente y queda registrado igual.
+* R1.18 — restituir un segmento con alguien de evidencia dudosa es decisión
+  del coordinador, no un relleno silencioso: en la lista de espera los
+  verificados van primero, y cada propuesto lleva sus `marcasEvidencia`.
 """
 
 from . import configuracion, declaracion, embudo, historial, modelo, seleccion, sesiones, util
@@ -53,13 +56,15 @@ def proponer(ctx, actor, sesion_id, cuerpo):
     convs = embudo.convocatorias(ctx.store, sesion_id)
 
     espera = sorted([c for c in convs if c["estado"] == modelo.CANDIDATO],
-                    key=lambda c: c.get("ordenListaEspera") or 0)
+                    key=lambda c: (sesiones.evidencia_floja(c), c.get("ordenListaEspera") or 0))
     propuestos, parciales = [], []
     for c in espera:
         rompe = _diferencias(c["segmento"], perdido["segmento"], dims)
         item = {"idPersona": c["idPersona"], "codigo": util.codigo_de(c["idPersona"]),
                 "segmento": c["segmento"], "origen": "lista_de_espera",
-                "anulacion": c.get("anulacion"), "rompe": rompe}
+                "anulacion": c.get("anulacion"), "rompe": rompe,
+                "marcasEvidencia": c.get("marcasEvidencia") or [],
+                "evidenciaFloja": sesiones.evidencia_floja(c)}
         (parciales if rompe else propuestos).append(item)
 
     # Si la lista de espera no restituye el segmento, se busca en el panel.

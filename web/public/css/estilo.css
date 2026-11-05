@@ -262,6 +262,17 @@ tr.clickable { cursor: pointer; }
 /* ══ EVIDENCIA / HISTORIAL ══ */
 .evid { font-size: 0.76rem; color: var(--dark); background: var(--orange-light); border-left: 3px solid var(--orange); padding: 0.45rem 0.6rem; border-radius: 0 3px 3px 0; margin-top: 0.35rem; }
 .evid small { display: block; color: var(--gray); font-size: 0.66rem; margin-top: 0.15rem; }
+.evid-dudoso, .evid-sin_evidencia, .evid-irrelevante { background: var(--amber-light); border-left-color: var(--amber); }
+.evid-sin_verificar { background: var(--blue-light); border-left-color: var(--blue); }
+.evid-no_cumple { background: var(--red-light); border-left-color: var(--red); }
+/* R1.18 — el candidato penalizado o de confianza baja se ve a simple vista. */
+tr.floja td:first-child { box-shadow: inset 4px 0 0 var(--amber); }
+tr.incompleta td:first-child { box-shadow: inset 4px 0 0 var(--blue); }
+.marcas { margin-top: 0.3rem; display: flex; flex-wrap: wrap; gap: 0.2rem; }
+.pie-lista { padding: 0.6rem 0.9rem; border-top: 1px solid var(--border); }
+.crit-fila { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+.crit-fila .crit-texto { flex: 1; }
+.crit-duro { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; white-space: nowrap; margin: 0; }
 .hist-chip { display: inline-flex; align-items: center; gap: 0.3rem; border: 1.5px solid var(--border); border-radius: 999px; padding: 0.15rem 0.55rem; font-size: 0.7rem; font-weight: 700; color: var(--dark); background: var(--white); cursor: pointer; }
 .hist-chip.cero { color: var(--gray); }
 .hist-chip.alto { border-color: var(--amber); color: var(--amber); }

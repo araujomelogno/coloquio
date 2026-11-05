@@ -293,6 +293,11 @@ def proponer_invitacion(sesion, convocatorias):
     Greedy sobre la lista de espera (en su orden): toma primero a quienes
     cubren los segmentos con más déficit contra su meta de invitación, hasta
     llegar a la meta total. Devuelve los ids propuestos y el supuesto.
+
+    R1.18 — no completa cuota con candidatos de evidencia floja (penalizados
+    o de confianza baja) mientras haya uno verificado que sirva: entre dos que
+    aportan a la cuota, siempre gana el verificado, aunque aporte menos. Si
+    tiene que recurrir a uno flojo, lo dice (`conEvidenciaFloja`, `avisos`).
     """
     ratio = sesion.get("ratioSobrerreclutamiento") or 1
     meta_total = modelo.meta_invitacion(sesion.get("cupoObjetivo") or 0, ratio)
@@ -323,7 +328,8 @@ def proponer_invitacion(sesion, convocatorias):
             return sum(1 for (dim, cat), f in faltas.items()
                        if f <= 0 and cumple(conv.get("segmento"), dim, cat))
 
-        mejor = max(espera, key=lambda c: (aporte(c), -exceso(c), -(c.get("ordenListaEspera") or 0)))
+        mejor = max(espera, key=lambda c: (aporte(c) > 0, not evidencia_floja(c), aporte(c),
+                                           -exceso(c), -(c.get("ordenListaEspera") or 0)))
         if cuotas and aporte(mejor) == 0 and any(f > 0 for f in faltas.values()):
             # Nadie en espera aporta a un segmento con déficit: se corta y se
             # informa, en vez de completar con cualquiera.
@@ -332,8 +338,20 @@ def proponer_invitacion(sesion, convocatorias):
         elegidos.append(mejor["idPersona"])
         actuales.append(mejor)
     faltas = deficit(actuales)
+    flojos = [c["idPersona"] for c in actuales[len(invitados):] if evidencia_floja(c)]
+    avisos = []
+    if flojos:
+        avisos.append({
+            "tipo": "evidencia_floja",
+            "mensaje": (f"La propuesta incluye {len(flojos)} candidato(s) con evidencia floja "
+                        "(penalizados o de confianza baja): no había candidatos verificados "
+                        "suficientes en la lista de espera para completar la cuota. Revisá su "
+                        "evidencia antes de invitarlos."),
+        })
     return {
         "propuestos": elegidos,
+        "conEvidenciaFloja": flojos,
+        "avisos": avisos,
         "metaInvitacionTotal": meta_total,
         "yaInvitados": len(invitados),
         "tasaCaidaSupuesta": modelo.tasa_caida_supuesta(ratio),
@@ -344,6 +362,14 @@ def proponer_invitacion(sesion, convocatorias):
             {"dimension": d, "categoria": c, "faltan": f}
             for (d, c), f in faltas.items() if f > 0],
     }
+
+
+def evidencia_floja(conv):
+    """R1.18 — entró penalizado o con confianza baja (o sin verificar, que
+    para `paneles` es confianza baja). Un candidato elegido sin criterio
+    semántico no tiene marcas: no hay evidencia que juzgar."""
+    return bool(set(conv.get("marcasEvidencia") or ()) &
+                {"penalizado", "confianzaBaja", "verificacionIncompleta"})
 
 
 def horas_hasta(sesion, ahora):
