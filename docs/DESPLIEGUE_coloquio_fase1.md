@@ -289,7 +289,7 @@ El canal manual funciona sin esto. Para el de WhatsApp:
 **Automática, antes de desplegar:**
 
 ```bash
-cd functions && python3 -m pytest -q                       # 84 pruebas, en memoria
+cd functions && python3 -m pytest -q                       # 96 pruebas, en memoria
 # y contra la implementación real de Firestore, con el emulador:
 firebase emulators:start --only firestore --project demo-coloquio &
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python3 -m pytest -q
