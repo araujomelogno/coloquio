@@ -5,7 +5,7 @@ import * as api from '../api.js';
 import { S, puede } from '../app.js';
 import { $, $$, esc, encabezado, cargando, plata, modal, toast, error, confirmar } from '../ui.js';
 
-const ROLES = { coordinador: 'Coordinador de campo', investigador: 'Investigador', administrador: 'Administrador' };
+const ROLES = { coordinador: 'Coordinador de campo', investigador: 'Investigador', identificador: 'Identificar candidatos', administrador: 'Administrador' };
 
 export async function render() {
   const main = $('#main');

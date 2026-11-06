@@ -22,7 +22,7 @@ export const S = { yo: null, entorno: null, catalogos: null };
 let auth = null;
 let fb = null;
 
-const ROLES = { coordinador: 'Coordinación de campo', investigador: 'Investigación', administrador: 'Administración' };
+const ROLES = { coordinador: 'Coordinación de campo', investigador: 'Investigación', identificador: 'Identificación de candidatos', administrador: 'Administración' };
 export const puede = (permiso) => (S.yo?.permisos || []).includes(permiso);
 
 /* ── Ingreso ─────────────────────────────────────────────────────── */

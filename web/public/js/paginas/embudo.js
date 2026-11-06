@@ -7,7 +7,7 @@ import * as api from '../api.js';
 import { puede } from '../app.js';
 import {
   $, $$, esc, cargando, estado, segmento, codigo, fechaHora, hora, vacio, modal, toast, error,
-  pedirMotivo, confirmar, DIM, pct, ETIQUETAS,
+  pedirMotivo, confirmar, DIM, pct, ETIQUETAS, cargarAtributos,
 } from '../ui.js';
 import { cabeceraSesion } from './sesiones.js';
 
@@ -44,8 +44,7 @@ export function panelCuota(c) {
 export async function render(id) {
   const main = $('#main');
   main.innerHTML = cargando();
-  const { html } = await cabeceraSesion(id, 'embudo');
-  const e = await api.sesiones.embudo(id);
+  const [{ html }, e] = await Promise.all([cabeceraSesion(id, 'embudo'), api.sesiones.embudo(id), cargarAtributos()]);
   const abierta = ['planificada', 'convocando', 'confirmada'].includes(e.sesion.estado);
   const c = e.cuota;
   const m = e.metricas;
@@ -236,8 +235,11 @@ async function reemplazo(sesionId, cuerpoPerdido) {
 }
 
 function exportar(e) {
-  const filas = [['codigo', 'sexo', 'tramo_etario', 'localidad', 'estado', 'canal', 'es_reemplazo', 'anulo_fatiga']];
-  e.convocatorias.forEach((x) => filas.push([x.codigo, x.segmento.sexo, x.segmento.tramoEtario, x.segmento.localidad, x.estado, x.canal, x.esReemplazoDe ? 'si' : '', x.anulacion ? 'si' : '']));
+  // Las columnas de segmento son las dimensiones con cuota (las claves del catálogo).
+  const dims = [...new Set([...(e.cuota?.cuotas || []).map((q) => q.dimension),
+    ...e.convocatorias.flatMap((x) => Object.keys(x.segmento || {}))])].sort();
+  const filas = [['codigo', ...dims, 'estado', 'canal', 'es_reemplazo', 'anulo_fatiga']];
+  e.convocatorias.forEach((x) => filas.push([x.codigo, ...dims.map((d) => (x.segmento || {})[d]), x.estado, x.canal, x.esReemplazoDe ? 'si' : '', x.anulacion ? 'si' : '']));
   const csv = filas.map((f) => f.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
