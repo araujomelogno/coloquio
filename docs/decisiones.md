@@ -87,6 +87,12 @@ restricción real del sistema. Las pruebas están en `functions/tests/`.
 | [D49](#d49) | Modo laxo por defecto, explícito siempre, y lo excluido se cuenta | L |
 | [D50](#d50) | Un estricto que vacía la lista no cae a demográfica | L |
 | [D51](#d51) | La calidad de evidencia viaja hasta el embudo, y la propuesta la respeta | L |
+| [D52](#d52) | Ningún atributo tiene nombre en COLOQUIO, tampoco en las cuotas | M · Selección R1.14-R1.17 |
+| [D53](#d53) | El segmento guarda solo las dimensiones con cuota, leídas de la bóveda | M |
+| [D54](#d54) | La mixta vuelve a filtrar los ids del ranking con los valores de la bóveda | M |
+| [D55](#d55) | Los atributos especiales se usan como cualquier otro | M |
+| [D56](#d56) | Identificar es una acción con rol propio, y no deja nada en el store | M |
+| [D57](#d57) | El doble reproduce el SQL de la `0034` y no nombra atributos | M |
 | [D45](#d45) | Los umbrales de fatiga son un punto de partida, no una definición | K · Abierto |
 
 ---
@@ -1312,6 +1318,209 @@ orden de una sugerencia que igual pasa por un humano.
 (que además comprueba que sin las marcas los habría elegido),
 `test_r118_propuesta_recurre_a_penalizados_y_lo_dice`,
 `test_r118_reemplazo_ofrece_primero_verificados`.
+
+---
+
+# Bloque M · Selección: catálogo, columnas, ficha e identificación (R1.14 a R1.17)
+
+Todo lo de este bloque usa la superficie que agregó `paneles` en `boveda/0034`:
+`v_atributo_catalogo`, `f_persona_convocable_filtrada()`,
+`atributos_de_personas()`, `ficha_candidato()` e `identificar_candidatos()`.
+
+<a id="d52"></a>
+## D52 · Ningún atributo tiene nombre en COLOQUIO, tampoco en las cuotas
+
+**El problema.** El formulario de selección tenía tres campos fijos (`sexo`,
+`tramoEtario`, `localidad`) y la edad. Las cuotas de la sesión y el segmento de
+cada convocatoria usaban esas mismas tres claves. El catálogo de la bóveda
+(`atributo_demografico`) ya tenía más atributos, y crecía sin que COLOQUIO se
+enterara. El addendum lo pide sin vueltas: «si aparece `sexo` escrito a mano en
+el front, el requisito está incumplido».
+
+**La decisión.** Hay un solo vocabulario, el catálogo de la bóveda, y se lee en
+cada pedido, sin caché:
+- **Filtros.** Viajan con la forma de `f_persona_convocable_filtrada()`:
+  `{clave: {en} | {min, max} | {desde, hasta}}`. Valida la bóveda: una clave,
+  un operador o una categoría desconocidos son error, no un filtro que se
+  ignoró.
+- **Formulario.** Se arma con el catálogo:
+  - un atributo con categorías es un combo de selección múltiple;
+  - un numérico, o un derivado sin categorías como la edad, es un rango;
+  - una fecha es un rango de fechas.
+- **Cuotas.** Van por cualquier atributo que tenga categorías. La dimensión es
+  la clave del atributo; la categoría, la clave de la categoría.
+
+Se decidió con producto el 2026-11-06 que «ninguna clave» incluye las cuotas.
+
+**Alternativas descartadas.** *Dejar las cuotas en las tres dimensiones de
+siempre.* El cambio era más chico, pero dejaba claves escritas a mano y obligaba
+a seguir leyendo las columnas fijas de `v_persona_convocable`, que en `paneles`
+ya son deuda.
+
+**Consecuencias.**
+- La única clave vieja que no coincidía con el catálogo era `tramoEtario`
+  (`tramo_etario`). Los datos guardados se migran con
+  `scripts/migrar_claves_r114.py`. Los valores (`F`, `25-34`, `Montevideo`)
+  ya eran claves de categoría y no cambian.
+- Una cuota guardada sobre un atributo que después se dio de baja sigue legible.
+  En el armado aparece «(dado de baja)», y cambiar solo el cupo no la revalida
+  contra el catálogo.
+
+**Dónde vive.** `coloquio/atributos.py`, `coloquio/sesiones.py`
+(`normalizar_cuotas`), `coloquio/motor.py` (`criterios_para_paneles`),
+`web/public/js/paginas/seleccion.js` y `sesiones.js`.
+
+**Cómo se verifica.** `test_r114_ningun_atributo_se_nombra_en_el_codigo`. Busca
+las claves del catálogo de prueba en todo `functions/coloquio` y
+`web/public/js`, entre comillas o como propiedad. También
+`test_r114_cuotas_por_cualquier_atributo_con_categorias` y
+`test_migracion_r114_renombra_la_dimension_vieja_y_es_idempotente`.
+
+---
+
+<a id="d53"></a>
+## D53 · El segmento guarda solo las dimensiones con cuota, leídas de la bóveda
+
+**El problema.** `f_persona_convocable_filtrada()` devuelve ids y nada más. Hay
+que saber a qué segmento pertenece cada persona, para la cuota y para el
+reemplazo. Guardar toda su demografía en el store sería mucho más de lo que
+hace falta. Algunos atributos además son sensibles (D55).
+
+**La decisión.** El segmento de una convocatoria son los valores de la persona
+**en las dimensiones con cuota de esa sesión**. Se leen con
+`atributos_de_personas()` al buscar y se vuelven a leer al incorporar: el
+cliente no los manda. Si una edición agrega una dimensión de cuota, a quien ya
+está en el embudo se le completa el valor nuevo. Ese valor se lee de la bóveda
+**antes** de la transacción, porque la bóveda es un efecto externo y la
+transacción se puede reintentar.
+
+**Consecuencias.** Una persona que no tiene cargada una dimensión no cuenta
+para ninguna categoría de esa cuota. No se inventa un valor.
+
+**Dónde vive.** `seleccion.vigentes_con_segmento`, `atributos.segmentos`,
+`sesiones._segmentos_a_completar`.
+
+**Cómo se verifica.**
+`test_r114_sumar_una_dimension_de_cuota_completa_el_segmento_de_quien_ya_esta`.
+
+---
+
+<a id="d54"></a>
+## D54 · La mixta vuelve a filtrar los ids del ranking con los valores de la bóveda
+
+**El problema.** En la mixta, el universo son los ids que rankeó el motor de
+`paneles`, que ya aplicó los filtros demográficos. Antes COLOQUIO los cruzaba
+con la vista, que tenía las columnas fijas. `f_persona_convocable_filtrada()`
+no acepta una lista de ids. Cruzar con su resultado entero tampoco sirve: tiene
+un tope de 5000, y con un panel de decenas de miles el cruce perdería gente sin
+avisar.
+
+**La decisión.**
+1. COLOQUIO valida los filtros contra la bóveda, llamando a la función con
+   `limite = 1`. Así un error sale con su mensaje, no como un filtro ignorado.
+2. Aplica el gate a los ids del ranking (`v_persona_convocable`).
+3. Vuelve a aplicar los filtros sobre los valores de `atributos_de_personas()`:
+   `en` sobre el valor, `min`/`max` sobre el número y `desde`/`hasta` sobre la
+   fecha.
+
+**Alternativas descartadas.** *Confiar en el filtro del motor.* Es la misma
+regla, pero el motor es otro sistema, y el gate de COLOQUIO no se delega.
+
+**Consecuencias.** La regla de filtrado existe en dos lugares: la bóveda y
+`atributos.cumple`. Para que no se separen, hay una prueba que compara las dos
+sobre el panel entero, filtro por filtro.
+
+**Cómo se verifica.** `test_r114_mixta_vuelve_a_filtrar_igual_que_la_boveda`.
+
+---
+
+<a id="d55"></a>
+## D55 · Los atributos especiales se usan como cualquier otro
+
+**El problema.** El catálogo marca `es_especial` las categorías del artículo 18
+de la Ley 18.331: salud, origen, religión, afiliación, ideología, vida sexual.
+El addendum proponía no ofrecerlos por defecto y habilitarlos por estudio, y lo
+dejaba como pregunta abierta de cumplimiento.
+
+**La decisión.** Producto decidió el 2026-11-06 que estén disponibles igual
+que los demás: como filtro, como cuota, como columna y en la ficha. COLOQUIO
+conserva la marca (`esEspecial` en el catálogo), pero no restringe ni registra
+su uso.
+
+**Consecuencias.** Queda sin efecto el criterio de aceptación del addendum
+según el cual «un filtro sobre un atributo especial no habilitado es
+rechazado». Si cumplimiento pide después la habilitación por estudio, la marca
+ya está en el catálogo y en la API.
+
+**Cómo se verifica.** `test_r114_un_atributo_especial_se_puede_usar_como_cualquiera`.
+
+---
+
+<a id="d56"></a>
+## D56 · Identificar es una acción con rol propio, y no deja nada en el store
+
+**El problema.** `identificar_candidatos()` devuelve nombre, email y celular
+antes de convocar. Es la decisión D84 de `paneles`, que afloja la regla de la
+Fase 5 con tres límites: por sesión, auditado y como una acción. Del lado de
+COLOQUIO hay que sostener esos límites y R1.12.
+
+**La decisión.**
+- **Permiso propio.** `identificar` es un permiso aparte, espejo de
+  `reidentificar` en `paneles`, con un rol nuevo (`identificador`) que se suma
+  a los otros. Lo tiene también el administrador. Sin él, la lista es seudónima
+  y el botón no aparece.
+- **Una sola ruta.** Solo `POST /sesiones/{id}/identificar` llama a la función,
+  con los ids tildados (hasta 200). Pasa el id de la sesión como referencia y el
+  email del usuario como actor. Buscar, abrir la ficha o pedir columnas no
+  identifican.
+- **Nada en el store.** La ruta no escribe nada: ni la lista, ni un evento, ni
+  un contador, ni un log. La auditoría la escribe la bóveda, una fila por
+  persona antes de devolverla.
+- **Solo en memoria.** En el navegador la identidad vive en una variable de la
+  pantalla, nunca en `localStorage` ni en `sessionStorage`, y se borra al buscar
+  de nuevo o al salir.
+
+**Consecuencias.** El criterio del addendum «un candidato no incorporado no
+tiene contacto» quedó superado por D84 para la identificación.
+`contacto_para_convocatoria()` no cambió: sin una convocatoria declarada sigue
+negándose (`test_r117_identificar_no_es_convocar`).
+
+**Dónde vive.** `coloquio/candidatos.py`, `coloquio/auth.py`,
+`web/public/js/paginas/seleccion.js`.
+
+**Cómo se verifica.** `test_r117_*`, en particular
+`test_r117_identificar_veinte_audita_veinte_y_no_deja_nada_en_el_store`
+(compara el store entero antes y después, y busca los nombres en el store y en
+la salida estándar).
+
+---
+
+<a id="d57"></a>
+## D57 · El doble reproduce el SQL de la `0034` y no nombra atributos
+
+**El problema.** Si el doble de la bóveda aproxima, las pruebas pasan y
+producción no (ver D48).
+
+**La decisión.** Cada primitiva de `BovedaMemoria` sigue a su función de
+`paneles`: las mismas validaciones, en el mismo orden, con el mismo SQLSTATE y
+el mismo mensaje; el mismo gate; el mismo orden de filas. Eso incluye la
+precedencia de `f_atributo_persona()`: fecha de nacimiento, después edad
+declarada envejecida, después tramo cargado.
+
+El SQL de `paneles` reconoce la edad y el tramo por su clave. El doble los
+reconoce por una marca en su catálogo (`derivacion`), que pone la fábrica de
+pruebas. Así el doble tampoco nombra atributos.
+
+La conversión a la forma de la API es una sola, en la clase base, y la usan las
+dos implementaciones. Dos detalles de esa conversión:
+- La ficha expone los paneles con `etiqueta` y no con `nombre`, que es un campo
+  de `pii.CAMPOS_PII`.
+- Un rechazo de la bóveda llega como `ErrorSQL(sqlstate, mensaje)`.
+
+**Consecuencias.** Lo que el doble no puede probar, lo cubre
+`scripts/integracion_boveda.py` contra el cluster de pruebas de `paneles`.
+
+**Dónde vive.** `coloquio/boveda.py`, `tests/fabrica.py`.
 
 ---
 

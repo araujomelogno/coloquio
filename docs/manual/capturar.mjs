@@ -78,12 +78,19 @@ async function limpiar(p) {
   await p.waitForTimeout(150);
 }
 let n = 0;
-const nombre = (clave) => `${String(++n).padStart(2, '0')}-${clave}.png`;
-async function captura(p, clave, { modal = false, elemento = null, completa = false, toast = false } = {}) {
+// `extra` agrega una captura sin correr la numeración (11a, 11b…): así sumar
+// una pantalla no renombra todas las que siguen ni rompe el manual.
+let letra = 0;
+const nombre = (clave, extra) => {
+  if (extra) return `${String(n).padStart(2, '0')}${'abcdefgh'[letra++]}-${clave}.png`;
+  letra = 0;
+  return `${String(++n).padStart(2, '0')}-${clave}.png`;
+};
+async function captura(p, clave, { modal = false, elemento = null, completa = false, toast = false, extra = false } = {}) {
   if (!toast) await limpiar(p);
   await p.evaluate(() => document.fonts.ready);
   await p.waitForTimeout(250);
-  const archivo = path.join(SALIDA, nombre(clave));
+  const archivo = path.join(SALIDA, nombre(clave, extra));
   if (modal) await p.locator('.modal-box').last().screenshot({ path: archivo });
   else if (elemento) await p.locator(elemento).first().screenshot({ path: archivo });
   else await p.screenshot({ path: archivo, fullPage: completa });
@@ -160,6 +167,9 @@ await captura(p, 'estudio-ficha');
 await p.click('#nueva-sesion'); await p.waitForSelector('#s-nombre');
 await p.fill('#s-nombre', 'Grupo 2 — 45 a 64'); await p.fill('#s-lugar', 'Sala Equipos, Pocitos');
 await p.fill('#s-cupo', '8'); await p.fill('#s-ratio', '1.5');
+// R1.14 — las cuotas salen del catálogo: se agregan dos sobre el primer atributo.
+await p.click('#mas-cuota'); await p.click('#mas-cuota');
+await p.locator('[data-cuota]').nth(1).locator('[data-f="categoria"]').selectOption({ index: 1 });
 await captura(p, 'sesion-nueva', { modal: true });
 await cerrarModal(p);
 
@@ -171,12 +181,33 @@ await captura(p, 'sesion-armado');
 // ── 5 · Selección ──
 await p.goto(`${BASE}/#/sesiones/${S}/seleccion`); await p.waitForSelector('#buscar');
 await p.click('#modo label:has(input[value=mixta])');
-await p.click('.seg label:has(input[name=tramoEtario][value="25-34"])');
-await p.click('.seg label:has(input[name=tramoEtario][value="35-44"])');
+// R1.14 — el formulario sale del catálogo de la bóveda: un combo por atributo.
+const combo = (clave) => `details.combo[data-attr="${clave}"]`;
+await p.click(`${combo('tramo_etario')} summary`);
+await p.click(`${combo('tramo_etario')} label:has-text("25-34")`);
+await p.click(`${combo('tramo_etario')} label:has-text("35-44")`);
 await p.fill('.crit-texto', 'toma cerveza artesanal con amigos');
 await captura(p, 'seleccion-consulta', { elemento: '.card' });
+await p.click(`${combo('tramo_etario')} summary`);
 await p.click('#buscar'); await p.waitForSelector('text=modo laxo'); await esperar(p);
 await captura(p, 'seleccion-mixta');
+// R1.15 — columnas elegidas; R1.16 — ficha; R1.17 — identificar los tildados.
+await p.click('#columnas summary');
+await p.click('#columnas label:has-text("Nivel educativo")');
+await p.click('#columnas label:has-text("Cantidad de hijos")');
+await esperar(p, 700);
+await p.evaluate(() => document.querySelector('#resultado').scrollIntoView());
+await captura(p, 'seleccion-columnas', { extra: true });
+await p.click('#columnas summary'); await esperar(p);
+await p.locator('[data-ficha]').first().click(); await p.waitForSelector('.modal-box h4'); await esperar(p);
+await captura(p, 'ficha', { modal: true, extra: true });
+await cerrarModal(p);
+for (const c of (await p.$$('[data-sel][data-excluido="0"]:not(:disabled)')).slice(0, 3)) await c.check();
+await p.click('#identificar'); await p.waitForSelector('.modal-box [data-ok]');
+await p.click('.modal-box [data-ok]'); await p.waitForSelector('.identidad'); await esperar(p, 700);
+await p.evaluate(() => document.querySelector('#resultado').scrollIntoView());
+await captura(p, 'identificar', { extra: true });
+for (const c of await p.$$('[data-sel]:checked')) await c.uncheck();
 await p.click('#modo label:has(input[value=demografica])');
 await p.click('#buscar'); await p.waitForSelector('text=demográfica pura'); await esperar(p);
 await p.locator('text=Excluidos por el filtro anti-panelista-profesional').scrollIntoViewIfNeeded();
@@ -251,10 +282,10 @@ await api('POST', `/estudios/${banca.id}/pauta`, { topicos: [{ titulo: 'Uso de l
 const mini = await api('POST', '/sesiones', {
   estudioId: banca.id, nombre: 'Mini-grupo Maldonado', tipo: 'grupo', fecha: new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 16),
   lugar: 'Hotel Conrad, Punta del Este', cupoObjetivo: 4, ratioSobrerreclutamiento: 1,
-  cuotas: [{ dimension: 'sexo', categoria: 'F', objetivo: 4 }, { dimension: 'tramoEtario', categoria: '45-54', objetivo: 4 },
+  cuotas: [{ dimension: 'sexo', categoria: 'F', objetivo: 4 }, { dimension: 'tramo_etario', categoria: '45-54', objetivo: 4 },
     { dimension: 'localidad', categoria: 'Maldonado', objetivo: 4 }],
 });
-const selMini = await api('POST', `/sesiones/${mini.id}/candidatos`, { modo: 'demografica', filtros: { sexo: ['F'], tramoEtario: ['45-54'], localidad: ['Maldonado'] } });
+const selMini = await api('POST', `/sesiones/${mini.id}/candidatos`, { modo: 'demografica', filtros: { sexo: ['F'], tramo_etario: ['45-54'], localidad: ['Maldonado'] } });
 const idsMini = selMini.candidatos.map((c) => c.idPersona);
 await api('POST', `/sesiones/${mini.id}/convocatorias`, { candidatos: idsMini });
 await api('POST', `/sesiones/${mini.id}/invitacion`, { ids: idsMini });

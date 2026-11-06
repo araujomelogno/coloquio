@@ -19,7 +19,7 @@ pip install Pillow
 ### 1 · Capturar
 
 ```bash
-node docs/manual/capturar.mjs            # levanta el servidor local en :8799 y deja 38 PNG en capturas/
+node docs/manual/capturar.mjs            # levanta el servidor local en :8799 y deja 41 PNG en capturas/
 ```
 
 El script hace tres retoques en el navegador, ninguno sobre el repo, y los
@@ -70,7 +70,7 @@ configuración de página por impresión. Es el mismo mecanismo que el manual de
 | `portada.html` | La portada, a sangre |
 | `manual.html` | El índice y las quince secciones |
 | `estilo.css` | Los estilos, compartidos por los dos (base: el manual de `paneles`) |
-| `capturas/` | Las 38 capturas |
+| `capturas/` | Las 41 capturas (las de sufijo `a`, `b`, `c` se suman sin correr la numeración) |
 | `tipografia/` | Montserrat local, para que el PDF salga igual sin red |
 | `capturar.mjs` | Toma las capturas |
 | `generar_pdf.mjs` | Maqueta el PDF |
