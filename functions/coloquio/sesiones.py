@@ -2,8 +2,10 @@
 
 * **Una sesión no se puede abrir sin pauta activa** (R1.1). Queda atada a la
   versión vigente al abrirla.
-* La sesión declara cupo objetivo, cuotas de composición (por dimensión:
-  sexo, tramo etario, localidad) y ratio de sobre-reclutamiento. De ahí sale la
+* La sesión declara cupo objetivo, cuotas de composición y ratio de
+  sobre-reclutamiento. Una cuota es por cualquier atributo del catálogo de la
+  bóveda que tenga categorías (R1.14): la dimensión es la clave del atributo
+  y la categoría, la clave de la categoría. Ninguna está escrita acá. De ahí sale la
   **meta de invitación** de cada segmento: `ceil(objetivo × ratio)`, y el
   supuesto que la sostiene —la tasa de caída `1 − 1/ratio`— se muestra.
 * El estado de cuota —cuántos faltan de cada segmento— se calcula a partir de
@@ -12,7 +14,7 @@
 
 import math
 
-from . import configuracion, estudios, modelo, pii, util
+from . import atributos, configuracion, estudios, modelo, pii, util
 from .errores import Conflicto, DatosInvalidos, NoEncontrado
 
 
@@ -28,16 +30,23 @@ def exigir_abierta(sesion):
         raise Conflicto(f"La sesión está {sesion.get('estado')}: ya no admite cambios de convocatoria.")
 
 
-def normalizar_cuotas(crudas, cupo):
+def normalizar_cuotas(crudas, cupo, dimensiones=None):
+    """`dimensiones`: los atributos con categorías del catálogo
+    (`atributos.dimensiones_de_cuota`). Sin él no se revalida contra el
+    catálogo: es el caso de cambiar solo el cupo de una sesión ya armada."""
     cuotas, vistos = [], set()
     for c in crudas or []:
         dimension = str(c.get("dimension") or "").strip()
-        if dimension not in modelo.DIMENSIONES_CUOTA:
-            raise DatosInvalidos(f"Dimensión de cuota inválida: {dimension!r}.",
-                                 {"validas": list(modelo.DIMENSIONES_CUOTA)})
+        if dimensiones is not None and dimension not in dimensiones:
+            raise DatosInvalidos(f"Dimensión de cuota inválida: {dimension!r}. Una cuota va sobre "
+                                 "un atributo del catálogo que tenga categorías.",
+                                 {"validas": sorted(dimensiones)})
         categoria = str(c.get("categoria") or "").strip()
         if not categoria:
             raise DatosInvalidos(f"Falta la categoría en una cuota de {dimension}.")
+        if dimensiones is not None and categoria not in {
+                x["clave"] for x in dimensiones[dimension]["categorias"]}:
+            raise DatosInvalidos(f"«{categoria}» no es una categoría de {dimension}.")
         if (dimension, categoria) in vistos:
             raise DatosInvalidos(f"La cuota {dimension} = {categoria} está repetida.")
         vistos.add((dimension, categoria))
@@ -47,7 +56,7 @@ def normalizar_cuotas(crudas, cupo):
             "objetivo": util.entero(c.get("objetivo"), f"objetivo de {categoria}", 0, 1000),
             "cubierto": 0,
         })
-    for dim in modelo.DIMENSIONES_CUOTA:
+    for dim in sorted({c["dimension"] for c in cuotas}):
         total = sum(c["objetivo"] for c in cuotas if c["dimension"] == dim)
         if total > cupo:
             raise DatosInvalidos(
@@ -110,7 +119,9 @@ def crear(ctx, actor, cuerpo):
             "Una sesión no se puede abrir sin pauta activa: la pauta es el "
             "instrumento. Cargá la pauta del estudio primero (R1.1).")
     datos = _campos(ctx, cuerpo)
-    datos["cuotas"] = normalizar_cuotas(cuerpo.get("cuotas"), datos["cupoObjetivo"])
+    datos["cuotas"] = normalizar_cuotas(
+        cuerpo.get("cuotas"), datos["cupoObjetivo"],
+        atributos.dimensiones_de_cuota(atributos.catalogo(ctx)) if cuerpo.get("cuotas") else None)
     datos.update({
         "estudioId": estudio_id,
         "refEstudio": estudio["refEstudio"],
@@ -142,6 +153,10 @@ def editar(ctx, actor, sesion_id, cuerpo):
     """
     campos = _campos(ctx, cuerpo, parcial=True)
     reprogramada = []
+    dimensiones, completar = None, {}
+    if cuerpo.get("cuotas"):
+        dimensiones = atributos.dimensiones_de_cuota(atributos.catalogo(ctx))
+        completar = _segmentos_a_completar(ctx, sesion_id, cuerpo["cuotas"])
 
     def tx_fn(tx):
         sesion = tx.get(f"sesion/{sesion_id}")
@@ -154,7 +169,15 @@ def editar(ctx, actor, sesion_id, cuerpo):
         cupo = cambios.get("cupoObjetivo", sesion["cupoObjetivo"])
         if "cuotas" in cuerpo or "cupoObjetivo" in cambios:
             crudas = cuerpo.get("cuotas", sesion.get("cuotas"))
-            cuotas = normalizar_cuotas(crudas, cupo)
+            cuotas = normalizar_cuotas(crudas, cupo, dimensiones)
+            # Una dimensión nueva: quien ya estaba en el embudo suma su valor
+            # (leído afuera de la transacción, de la bóveda).
+            for conv in convocatorias:
+                faltan = completar.get(conv["idPersona"])
+                if faltan:
+                    conv["segmento"] = {**(conv.get("segmento") or {}), **faltan}
+                    tx.update(f"sesion/{sesion_id}/convocatoria/{conv['idPersona']}",
+                              {"segmento": conv["segmento"]})
             recalcular_cubierto(cuotas, convocatorias)
             cambios["cuotas"] = cuotas
         if not cambios:
@@ -172,6 +195,21 @@ def editar(ctx, actor, sesion_id, cuerpo):
         resultado["redeclaracion"] = declaracion.redeclarar_sesion(
             ctx, sesion_id, resultado, embudo.convocatorias(ctx.store, sesion_id))
     return resultado
+
+
+def _segmentos_a_completar(ctx, sesion_id, cuotas_nuevas):
+    """{idPersona: {dimensión: valor}} de lo que les falta a las convocatorias
+    existentes para las dimensiones de las cuotas nuevas. Se lee **antes** de
+    la transacción: la bóveda es un efecto externo y la transacción se puede
+    reintentar."""
+    nuevas = {str(c.get("dimension") or "").strip() for c in cuotas_nuevas or []}
+    convs = [d for _, d in ctx.store.listar(f"sesion/{sesion_id}/convocatoria")]
+    faltan = {c["idPersona"]: sorted(nuevas - set(c.get("segmento") or {})) for c in convs}
+    ids = [i for i, dims in faltan.items() if dims]
+    if not ids:
+        return {}
+    segs = atributos.segmentos(ctx, ids, sorted(nuevas))
+    return {i: {d: segs[i][d] for d in faltan[i] if d in segs[i]} for i in ids}
 
 
 def listar(ctx, estado=None, desde=None, hasta=None):

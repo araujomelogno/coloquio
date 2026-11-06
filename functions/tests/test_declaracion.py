@@ -188,8 +188,13 @@ def test_reemplazo_con_fatiga_sin_motivo_no_deja_declaracion(api, ctx, sesion):
     api("PATCH", f"/cuali/convocatorias/{sid}/{ids[0]}", {"a": "confirmado"})
     api("PATCH", f"/cuali/convocatorias/{sid}/{ids[0]}", {"a": "se_cayo"})
     seg = _conv(api, sid, ids[0])["segmento"]
+    # El segmento de cada persona sale de la bóveda (atributos_de_personas).
+    valores = {}
+    for f in ctx.bov.atributos(list(ctx.bov.personas)):
+        valores.setdefault(f["idPersona"], {})[f["atributo"]] = f["valor"]
     fatigado = next(pid for pid, p in ctx.bov.personas.items()
-                    if p["segmento"] == seg and pid not in ids and p["consiente"])
+                    if all(valores.get(pid, {}).get(d) == v for d, v in seg.items())
+                    and pid not in ids and p["consiente"])
     api("POST", "/cuali/historico", {"categoria": "bebidas", "fecha": "2026-08-01T19:00",
                                      "idPersonas": [fatigado]})
     with pytest.raises(RequiereAnulacion):

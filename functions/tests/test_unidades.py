@@ -229,3 +229,46 @@ def test_secretos_declarados_en_main():
     bloque = main[main.index("SECRETOS = ["):main.index("]", main.index("SECRETOS = ["))]
     declarados = set(re.findall(r'"([A-Z_]+)"', bloque))
     assert leidos == declarados
+
+
+def test_migracion_r114_renombra_la_dimension_vieja_y_es_idempotente():
+    """`scripts/migrar_claves_r114.py`: `tramoEtario` → `tramo_etario` en
+    cuotas, segmentos, alertas y decisiones; en seco no escribe; dos corridas
+    dejan todo igual."""
+    import importlib.util
+    import pathlib
+
+    from coloquio import store
+
+    ruta = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "migrar_claves_r114.py"
+    spec = importlib.util.spec_from_file_location("migrar_claves_r114", ruta)
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+
+    st = store.StoreMemoria()
+    viejo = {"sexo": "F", "tramoEtario": "25-34"}
+    st.set("sesion/s1", {
+        "cuotas": [{"dimension": "tramoEtario", "categoria": "25-34", "objetivo": 4, "cubierto": 1},
+                   {"dimension": "sexo", "categoria": "F", "objetivo": 4, "cubierto": 1}],
+        "alertasBaja": [{"id": "a1", "segmento": dict(viejo)}],
+        "decisionesCuota": [{"id": "d1", "perdido": {"tipo": "alerta", "segmento": dict(viejo)}}]})
+    st.set("sesion/s1/convocatoria/p1", {"estado": "acepto", "segmento": dict(viejo)})
+    st.set("sesion/s2", {"cuotas": [{"dimension": "sexo", "categoria": "M", "objetivo": 2}]})
+
+    antes = str(st.todos())
+    assert mig.migrar(st, aplicar=False, salida=lambda *_: None) == 2
+    assert str(st.todos()) == antes                                   # en seco no escribe
+    assert mig.migrar(st, aplicar=True, salida=lambda *_: None) == 2
+    s1 = st.get("sesion/s1")
+    nuevo = {"sexo": "F", "tramo_etario": "25-34"}
+    assert [c["dimension"] for c in s1["cuotas"]] == ["tramo_etario", "sexo"]
+    assert s1["cuotas"][0]["cubierto"] == 1                           # el agregado no se toca
+    assert s1["alertasBaja"][0]["segmento"] == nuevo
+    assert s1["decisionesCuota"][0]["perdido"]["segmento"] == nuevo
+    assert st.get("sesion/s1/convocatoria/p1")["segmento"] == nuevo
+    despues = str(st.todos())
+    assert mig.migrar(st, aplicar=True, salida=lambda *_: None) == 0  # idempotente
+    assert str(st.todos()) == despues
+    # Vuelta atrás: deja todo como estaba antes de migrar.
+    assert mig.migrar(st, aplicar=True, salida=lambda *_: None, revertir=True) == 2
+    assert str(st.todos()) == antes

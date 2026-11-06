@@ -36,7 +36,9 @@ def nueva(id_persona, segmento, orden, actor_uid, ahora, canal="manual",
         "idPersona": id_persona,
         "estado": modelo.CANDIDATO,
         "canal": canal,
-        "segmento": {k: segmento.get(k) for k in modelo.DIMENSIONES_CUOTA},
+        # Solo las dimensiones con cuota de la sesión (minimización): lo arma
+        # `seleccion.vigentes_con_segmento()` con los valores de la bóveda.
+        "segmento": dict(segmento or {}),
         "ordenListaEspera": orden,
         "esReemplazoDe": es_reemplazo_de,
         "anulacion": anulacion,

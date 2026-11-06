@@ -69,8 +69,8 @@ def sembrar(ctx):
         "regaloId": r1["id"], "cuotas": [
             {"dimension": "sexo", "categoria": "F", "objetivo": 4},
             {"dimension": "sexo", "categoria": "M", "objetivo": 4},
-            {"dimension": "tramoEtario", "categoria": "25-34", "objetivo": 4},
-            {"dimension": "tramoEtario", "categoria": "35-44", "objetivo": 4}]})
+            {"dimension": "tramo_etario", "categoria": "25-34", "objetivo": 4},
+            {"dimension": "tramo_etario", "categoria": "35-44", "objetivo": 4}]})
     e2 = api("POST", "/cuali/estudios", {"nombre": "Banca digital", "cliente": "Banco X",
                                          "categoria": "banca", "descripcion": "uso de la app del banco"})
     del e2

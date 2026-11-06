@@ -56,8 +56,8 @@ def api(ctx, yo):
 CUOTAS = [
     {"dimension": "sexo", "categoria": "F", "objetivo": 4},
     {"dimension": "sexo", "categoria": "M", "objetivo": 4},
-    {"dimension": "tramoEtario", "categoria": "25-34", "objetivo": 4},
-    {"dimension": "tramoEtario", "categoria": "35-44", "objetivo": 4},
+    {"dimension": "tramo_etario", "categoria": "25-34", "objetivo": 4},
+    {"dimension": "tramo_etario", "categoria": "35-44", "objetivo": 4},
 ]
 
 
