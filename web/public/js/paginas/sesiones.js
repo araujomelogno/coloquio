@@ -4,6 +4,7 @@ import * as api from '../api.js';
 import { S, puede, navSesion, tabsSesion } from '../app.js';
 import {
   $, $$, esc, encabezado, cargando, estado, fechaHora, aInputLocal, vacio, modal, toast, error, DIM, pct,
+  cargarAtributos, atributo,
 } from '../ui.js';
 
 export async function lista() {
@@ -23,20 +24,28 @@ export async function lista() {
   $$('tr[data-id]').forEach((tr) => { tr.onclick = () => { location.hash = `#/sesiones/${tr.dataset.id}/embudo`; }; });
 }
 
+// R1.14 — una cuota es por cualquier atributo del catálogo que tenga
+// categorías. Dimensión y categoría salen de la bóveda; ninguna está acá.
+let DIMENSIONES = [];
+
 function filaCuota(c = {}) {
-  const opciones = (dim) => {
-    if (dim === 'sexo') return S.catalogos.sexos;
-    if (dim === 'tramoEtario') return S.catalogos.tramos;
-    return null;
-  };
-  const dim = c.dimension || 'sexo';
-  const ops = opciones(dim);
+  const dim = c.dimension || DIMENSIONES[0]?.clave || '';
+  const a = atributo(dim);
+  // Una cuota guardada sobre un atributo que se dio de baja sigue legible.
+  const opcionesDim = DIMENSIONES.map((x) => `<option value="${esc(x.clave)}" ${x.clave === dim ? 'selected' : ''}>${esc(x.etiqueta)}</option>`).join('')
+    + (dim && !DIMENSIONES.some((x) => x.clave === dim) ? `<option value="${esc(dim)}" selected>${esc(dim)} (dado de baja)</option>` : '');
+  const cats = a?.categorias || [];
+  const opcionesCat = cats.map((o) => `<option value="${esc(o.clave)}" ${o.clave === c.categoria ? 'selected' : ''}>${esc(o.etiqueta)}</option>`).join('')
+    + (c.categoria && !cats.some((o) => o.clave === c.categoria) ? `<option value="${esc(c.categoria)}" selected>${esc(c.categoria)} (dada de baja)</option>` : '');
   return `<div class="form-row-4" data-cuota style="align-items:end;margin-bottom:.6rem">
-    <div><select data-f="dimension">${Object.entries(DIM).map(([k, v]) => `<option value="${k}" ${k === dim ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-    <div data-cat>${ops ? `<select data-f="categoria">${ops.map((o) => `<option ${o === c.categoria ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
-      : `<input type="text" data-f="categoria" value="${esc(c.categoria || '')}" placeholder="Ej.: Montevideo" />`}</div>
+    <div><select data-f="dimension">${opcionesDim}</select></div>
+    <div data-cat><select data-f="categoria">${opcionesCat}</select></div>
     <div><input type="number" data-f="objetivo" min="0" value="${esc(c.objetivo ?? 4)}" /></div>
     <div><button class="btn btn-ghost" data-quitar>✕ quitar</button></div></div>`;
+}
+
+async function prepararDimensiones() {
+  DIMENSIONES = (await cargarAtributos()).filter((a) => (a.categorias || []).length);
 }
 
 function leerCuotas(el) {
@@ -66,8 +75,9 @@ function camposSesion(s = {}) {
     </div>
     <label>Cuotas de composición</label>
     <p class="field-hint mb">Cuántos de cada segmento querés <b>sentados</b>. El sistema sostiene la cuota durante toda la convocatoria.</p>
-    <div class="form-row-4 small muted" style="margin-bottom:.3rem"><div>Dimensión</div><div>Categoría</div><div>Objetivo</div><div></div></div>
-    <div id="cuotas">${(s.cuotas || [{ dimension: 'sexo', categoria: 'F', objetivo: 4 }, { dimension: 'sexo', categoria: 'M', objetivo: 4 }]).map(filaCuota).join('')}</div>
+    <div class="form-row-4 cuota-cab small muted" style="margin-bottom:.3rem"><div>Dimensión</div><div>Categoría</div><div>Objetivo</div><div></div></div>
+    <div id="cuotas">${(s.cuotas || []).map(filaCuota).join('')}</div>
+    ${DIMENSIONES.length ? '' : '<p class="field-hint">No se pudo leer el catálogo de atributos de la bóveda: las cuotas se cargan cuando vuelva.</p>'}
     <button class="btn btn-outline btn-sm" id="mas-cuota">+ Cuota</button>`;
 }
 
@@ -80,7 +90,7 @@ function conectarCampos(el) {
       fila.outerHTML = filaCuota({ dimension: ev.target.value, objetivo: fila.querySelector('[data-f="objetivo"]').value });
     }
   });
-  $('#mas-cuota', el).onclick = () => cont.insertAdjacentHTML('beforeend', filaCuota({ dimension: 'tramoEtario', categoria: '25-34', objetivo: 2 }));
+  $('#mas-cuota', el).onclick = () => cont.insertAdjacentHTML('beforeend', filaCuota({ objetivo: 2 }));
   const supuesto = () => {
     const cupo = parseInt($('#s-cupo', el).value, 10) || 0; const r = parseFloat($('#s-ratio', el).value) || 1;
     $('#s-supuesto', el).textContent = `Se invita a ${Math.ceil(cupo * r - 1e-9)} para sentar ${cupo}: se asume una caída del ${pct(1 - 1 / r)}.`;
@@ -95,7 +105,8 @@ const leerSesion = (el) => ({
   cuotas: leerCuotas(el),
 });
 
-export function formularioSesion({ estudio }) {
+export async function formularioSesion({ estudio }) {
+  await prepararDimensiones();
   const { el, cerrar } = modal({
     titulo: `Nueva sesión · ${esc(estudio.nombre)}`, ancho: true,
     cuerpo: `<p class="small muted mb">Queda atada a la pauta v${estudio.pautaActiva?.version}. Modalidad presencial (la virtual llega en la Fase 2).</p>` + camposSesion(),
@@ -126,7 +137,7 @@ export async function cabeceraSesion(id, pestana) {
 export async function armado(id) {
   const main = $('#main');
   main.innerHTML = cargando();
-  const { s, html } = await cabeceraSesion(id, 'armado');
+  const [{ s, html }] = await Promise.all([cabeceraSesion(id, 'armado'), prepararDimensiones()]);
   const abierta = ['planificada', 'convocando', 'confirmada'].includes(s.estado);
   const editable = abierta && puede('gestionar_sesiones');
   main.innerHTML = html + `

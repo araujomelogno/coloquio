@@ -59,10 +59,30 @@ export const ETIQUETAS = {
   planificada: 'Planificada', convocando: 'Convocando', confirmada: 'Confirmada', realizada: 'Realizada', cancelada: 'Cancelada',
 };
 export const estado = (e) => `<span class="est est-${esc(e)}">${esc(ETIQUETAS[e] || e)}</span>`;
-export const DIM = { sexo: 'Sexo', tramoEtario: 'Tramo etario', localidad: 'Localidad' };
+/* ── Atributos (R1.14): el vocabulario es el catálogo de la bóveda ──
+   Ningún atributo tiene nombre en el front. Las etiquetas salen de
+   `GET /atributos`; si la bóveda no responde, se muestra la clave. */
+const ATRIBUTOS = new Map();
+export function registrarAtributos(items) {
+  ATRIBUTOS.clear();
+  (items || []).forEach((a) => ATRIBUTOS.set(a.clave, a));
+}
+export async function cargarAtributos() {
+  try { registrarAtributos((await api.atributos.catalogo()).items); } catch (e) { console.warn('catálogo de atributos', e); }
+  return [...ATRIBUTOS.values()];
+}
+export const atributo = (clave) => ATRIBUTOS.get(clave);
+export const etiquetaDim = (clave) => ATRIBUTOS.get(clave)?.etiqueta || clave;
+export function etiquetaValor(clave, valor) {
+  const c = ATRIBUTOS.get(clave)?.categorias?.find((x) => x.clave === valor);
+  return c ? c.etiqueta : valor;
+}
+// `DIM[clave]` → la etiqueta del catálogo (o la clave si no está).
+export const DIM = new Proxy({}, { get: (_, clave) => etiquetaDim(String(clave)) });
 export function segmento(s) {
-  if (!s) return '—';
-  return `<span class="seg-pill">${['sexo', 'tramoEtario', 'localidad'].filter((k) => s[k]).map((k) => `<span title="${DIM[k]}">${esc(s[k])}</span>`).join('')}</span>`;
+  const pares = Object.entries(s || {}).filter(([, v]) => v !== null && v !== undefined && v !== '');
+  if (!pares.length) return '—';
+  return `<span class="seg-pill">${pares.map(([k, v]) => `<span title="${esc(etiquetaDim(k))}: ${esc(etiquetaValor(k, v))}">${esc(v)}</span>`).join('')}</span>`;
 }
 export const codigo = (c) => `<span class="codigo">${esc(c)}</span>`;
 export function histChip(h, idPersona) {

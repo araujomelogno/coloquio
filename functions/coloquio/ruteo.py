@@ -7,7 +7,7 @@ cliente no escribe en la base (R1.13) y las reglas de Firestore niegan todo.
 import re
 
 from . import (
-    canales, cascada, cierre, configuracion, consistencia, embudo, estudios, historial,
+    atributos, candidatos, canales, cascada, cierre, configuracion, consistencia, embudo, estudios, historial,
     importacion, incentivos, modelo, recepcion, reemplazo, seleccion, sesiones, tablero,
     usuarios, util,
 )
@@ -79,9 +79,6 @@ def catalogos(ctx, actor, p, c, q):
         "categorias": configuracion.categorias(ctx.store),
         "regalos": configuracion.listar_regalos(ctx.store, solo_activos=True),
         "estados": [{"codigo": e, "etiqueta": modelo.ETIQUETAS[e]} for e in modelo.ESTADOS],
-        "dimensiones": list(modelo.DIMENSIONES_CUOTA),
-        "tramos": ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
-        "sexos": ["F", "M"],
         "salidasSinReemplazo": modelo.SALIDAS_SIN_REEMPLAZO,
     }
 
@@ -156,6 +153,39 @@ def seleccionar(ctx, actor, p, c, q):
 @ruta("POST", "/sesiones/<sesion_id>/convocatorias", "seleccionar")
 def incorporar(ctx, actor, p, c, q):
     return 201, seleccion.incorporar(ctx, actor, p["sesion_id"], c)
+
+
+# ── R1.14 a R1.17 · catálogo, columnas, ficha, identificar ──────────
+
+@ruta("GET", "/atributos", "leer")
+def ver_catalogo(ctx, actor, p, c, q):
+    """El vocabulario de la bóveda: los atributos activos y sus categorías."""
+    return 200, {"items": atributos.catalogo(ctx)}
+
+
+@ruta("POST", "/atributos/valores", "seleccionar")
+def ver_valores(ctx, actor, p, c, q):
+    return 200, candidatos.valores(ctx, c)
+
+
+@ruta("GET", "/candidatos/<id_persona>/ficha", "seleccionar")
+def ver_ficha(ctx, actor, p, c, q):
+    return 200, candidatos.ficha(ctx, p["id_persona"])
+
+
+@ruta("POST", "/sesiones/<sesion_id>/identificar", "identificar")
+def identificar(ctx, actor, p, c, q):
+    return 200, candidatos.identificar(ctx, actor, p["sesion_id"], c)
+
+
+@ruta("GET", "/preferencias", "leer")
+def ver_preferencias(ctx, actor, p, c, q):
+    return 200, candidatos.preferencias(ctx, actor)
+
+
+@ruta("PUT", "/preferencias", "leer")
+def guardar_preferencias(ctx, actor, p, c, q):
+    return 200, candidatos.guardar_preferencias(ctx, actor, c)
 
 
 @ruta("GET", "/sesiones/<sesion_id>/invitacion", "leer")

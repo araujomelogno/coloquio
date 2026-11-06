@@ -1,7 +1,22 @@
-/* Pantalla 3 — Selección de candidatos (R1.2, R1.3, R1.9, R1.18).
+/* Pantalla 3 — Selección de candidatos (R1.2, R1.3, R1.9, R1.14 a R1.18).
 
    Demográfica, semántica o mixta; resultados con segmento, evidencia de por
    qué entró cada uno y su historial cualitativo en la misma pantalla.
+
+   R1.14: el formulario se arma con el catálogo de atributos de la bóveda.
+   Ningún atributo tiene nombre en este archivo: un atributo nuevo en `paneles`
+   aparece al recargar. Categorías del mismo atributo: o; atributos: y.
+
+   R1.15: columnas elegibles, recordadas por usuario. Agregar una columna no
+   vuelve a buscar: pide los valores de los ids que la lista ya tiene. Un
+   atributo ausente se ve distinto de uno declarado «sin dato».
+
+   R1.16: «Ficha» abre la ficha seudónima, con el historial cualitativo.
+
+   R1.17: «Identificar» actúa sobre los tildados y solo si el usuario tiene el
+   permiso. Nombre, email y celular viven en `IDENTIDADES`, en memoria de esta
+   pantalla: no se guardan en el navegador, no se mandan a ningún lado y se
+   borran al salir de la pantalla o al buscar de nuevo.
 
    R1.18: cada criterio semántico puede ser duro (filtra) o no (ordena), y la
    consulta corre en modo laxo (por defecto) o estricto. La lista dice qué
@@ -10,20 +25,54 @@
    no se exponen: son calibración del motor de `paneles`. */
 
 import * as api from '../api.js';
-import { S, puede } from '../app.js';
+import { puede } from '../app.js';
 import {
   $, $$, esc, cargando, segmento, codigo, histChip, vacio, modal, toast, error, pedirMotivo, DIM,
+  cargarAtributos, fecha, confirmar,
 } from '../ui.js';
 import { cabeceraSesion } from './sesiones.js';
 import { panelCuota } from './embudo.js';
 
 let ultima = null;
+let CATALOGO = [];
+let COLUMNAS = [];                 // claves elegidas, en el orden del catálogo
+const VALORES = new Map();         // idPersona → {clave: fila de atributos_de_personas}
+const IDENTIDADES = new Map();     // idPersona → {nombre, email, celular} (R1.17, solo en memoria)
+const TOPE_IDENTIFICAR = 200;
+
+const conCategorias = (a) => (a.categorias || []).length > 0;
+const tipoControl = (a) => (conCategorias(a) ? 'combo' : a.tipo === 'fecha' ? 'fechas' : 'rango');
+
+function control(a) {
+  if (tipoControl(a) === 'combo') {
+    return `<details class="combo" data-attr="${esc(a.clave)}"><summary><span class="combo-tit">${esc(a.etiqueta)}</span><span class="combo-sel">cualquiera</span></summary>
+      <div class="combo-lista">${a.categorias.map((c) => `<label><input type="checkbox" value="${esc(c.clave)}" /><span>${esc(c.etiqueta)}</span></label>`).join('')}</div></details>`;
+  }
+  const [op1, op2, tipo] = tipoControl(a) === 'fechas' ? ['desde', 'hasta', 'date'] : ['min', 'max', 'number'];
+  return `<div class="rango" data-attr="${esc(a.clave)}"><span class="rango-tit">${esc(a.etiqueta)}</span>
+    <input type="${tipo}" data-op="${op1}" placeholder="${tipo === 'number' ? 'desde' : ''}" aria-label="${esc(a.etiqueta)} ${op1}" />
+    <span class="muted">a</span>
+    <input type="${tipo}" data-op="${op2}" placeholder="${tipo === 'number' ? 'hasta' : ''}" aria-label="${esc(a.etiqueta)} ${op2}" /></div>`;
+}
+
+function formularioDemografico() {
+  if (!CATALOGO.length) {
+    return '<div class="alert alert-warn"><span>⚠️</span><span>No se pudo leer el catálogo de atributos de la bóveda. Se puede buscar sin filtros demográficos.</span></div>';
+  }
+  return `<div class="filtros-grid">${CATALOGO.map(control).join('')}</div>
+    <div class="field-hint">Varias categorías del mismo atributo se suman (o); atributos distintos se cruzan (y). Los atributos salen del catálogo de <code>paneles</code>: uno nuevo aparece al recargar.</div>`;
+}
 
 export async function render(id) {
   const main = $('#main');
   main.innerHTML = cargando();
-  const { s, html } = await cabeceraSesion(id, 'seleccion');
-  const chips = (nombre, valores) => `<div class="seg">${valores.map((v) => `<label><input type="checkbox" name="${nombre}" value="${esc(v)}" /><span>${esc(v)}</span></label>`).join('')}</div>`;
+  IDENTIDADES.clear();   // R1.17: la identidad no sobrevive a la pantalla
+  const [{ s, html }, catalogo, prefs] = await Promise.all([
+    cabeceraSesion(id, 'seleccion'), cargarAtributos(),
+    api.preferencias.ver().catch(() => ({ columnasSeleccion: [] }))]);
+  CATALOGO = catalogo;
+  // R1.15: un atributo dado de baja desaparece de las columnas, sin error.
+  COLUMNAS = CATALOGO.map((a) => a.clave).filter((k) => (prefs.columnasSeleccion || []).includes(k));
   main.innerHTML = html + `
     <div class="card">
       <div class="card-header"><span class="card-header-title">Consulta contra el panel</span>
@@ -33,17 +82,7 @@ export async function render(id) {
           <label><input type="radio" name="modo" value="mixta" /><span>Mixta</span></label>
         </div></div>
       <div class="card-body">
-        <div id="bloque-demo">
-          <div class="form-row">
-            <div class="form-group"><label>Sexo</label>${chips('sexo', S.catalogos.sexos)}</div>
-            <div class="form-group"><label>Tramo etario</label>${chips('tramoEtario', S.catalogos.tramos)}</div>
-          </div>
-          <div class="form-row-3">
-            <div class="form-group"><label>Localidad</label><input type="text" id="f-loc" placeholder="Montevideo, Canelones" /></div>
-            <div class="form-group"><label>Edad mínima</label><input type="number" id="f-min" /></div>
-            <div class="form-group"><label>Edad máxima</label><input type="number" id="f-max" /></div>
-          </div>
-        </div>
+        <div id="bloque-demo">${formularioDemografico()}</div>
         <div id="bloque-sem" class="hidden">
           <div class="form-group"><label>Qué dijo la gente en estudios anteriores</label>
             <div id="crits"></div>
@@ -56,8 +95,8 @@ export async function render(id) {
             </div>
             <div class="field-hint"><b>Laxo</b>: quien tiene evidencia dudosa o ninguna entra a la lista, marcado ⚠; el filtro fino lo hacés vos al llamar. <b>Estricto</b>: quedan afuera, y se informa cuántos y por qué.</div></div>
         </div>
-        <div class="inline"><button class="btn btn-orange" id="buscar">Buscar candidatos</button>
-          <span class="small muted">Nadie sin consentimiento vigente de contacto aparece: lo garantiza la vista de la bóveda, no este filtro.</span></div>
+        <div class="inline mt"><button class="btn btn-orange" id="buscar">Buscar candidatos</button>
+          <span class="small muted">Nadie sin consentimiento vigente de contacto aparece: lo garantiza la bóveda, no este filtro.</span></div>
       </div>
     </div>
     <div id="resultado" class="mt2"></div>`;
@@ -68,6 +107,11 @@ export async function render(id) {
     $('#bloque-sem').classList.toggle('hidden', modo === 'demografica');
   };
   $$('input[name=modo]').forEach((r) => { r.onchange = sincronizar; });
+  $$('details.combo').forEach((d) => d.addEventListener('change', () => {
+    const n = $$('input:checked', d).length;
+    $('.combo-sel', d).textContent = n ? `${n} elegida${n > 1 ? 's' : ''}` : 'cualquiera';
+    d.classList.toggle('activo', n > 0);
+  }));
   $('#mas-crit').onclick = () => agregarCriterio();
   agregarCriterio();
   $('#buscar').onclick = () => buscar(id, s);
@@ -84,15 +128,25 @@ function agregarCriterio(texto = '', duro = false) {
   $('#crits').appendChild(div);
 }
 
+// R1.14 — `{clave: {en: [...]} | {min, max} | {desde, hasta}}`, la forma de la bóveda.
+function leerFiltros() {
+  const filtros = {};
+  $$('details.combo').forEach((d) => {
+    const en = $$('input:checked', d).map((x) => x.value);
+    if (en.length) filtros[d.dataset.attr] = { en };
+  });
+  $$('.rango').forEach((r) => {
+    const cond = {};
+    $$('input[data-op]', r).forEach((i) => { if (i.value !== '') cond[i.dataset.op] = i.value; });
+    if (Object.keys(cond).length) filtros[r.dataset.attr] = cond;
+  });
+  return filtros;
+}
+
 function leerConsulta() {
-  const valores = (n) => $$(`input[name=${n}]:checked`).map((x) => x.value);
   return {
     modo: $('input[name=modo]:checked').value,
-    filtros: {
-      sexo: valores('sexo'), tramoEtario: valores('tramoEtario'),
-      localidad: $('#f-loc').value.split(',').map((x) => x.trim()).filter(Boolean),
-      edadMin: $('#f-min').value, edadMax: $('#f-max').value,
-    },
+    filtros: leerFiltros(),
     criterios: $$('.crit-fila').map((f) => ({
       texto: f.querySelector('.crit-texto').value.trim(),
       duro: f.querySelector('.crit-duro input').checked,
@@ -109,6 +163,8 @@ async function buscar(id, s, q = null) {
   try {
     const r = await api.sesiones.seleccionar(id, q);
     ultima = { sesion: id, r, q };
+    IDENTIDADES.clear();
+    VALORES.clear();
     pintar(id, s, r);
   } catch (e) { $('#resultado').innerHTML = `<div class="alert alert-error"><span>⚠️</span><span>${esc(e.message)}</span></div>`; }
   b.disabled = false;
@@ -154,19 +210,44 @@ function marcas(c) {
 
 const esFlojo = (c) => !!(c.penalizado || c.confianzaBaja);
 
-function fila(c, excluido = false) {
+// R1.15 — presente, vacío y ausente se ven distintos. Ausente: la bóveda no
+// devolvió la fila (no se cargó nunca); vacío: vino, pero sin texto.
+function celdaAtributo(pid, clave) {
+  const f = VALORES.get(pid)?.[clave];
+  if (!VALORES.get(pid)?.[`__${clave}`]) return '<span class="muted small">…</span>';   // todavía no se pidió
+  if (!f) return '<span class="ausente" title="Sin dato en el panel: este atributo no está cargado para esta persona">∅ no consta</span>';
+  if (f.valor === '' || f.etiquetaValor === '') return '<span class="vacio-val" title="Cargado sin valor">(vacío)</span>';
+  return `<span title="${esc(f.procedencia || '')}">${esc(f.etiquetaValor ?? f.valor)}</span>`;
+}
+
+function identidad(pid) {
+  const i = IDENTIDADES.get(pid);
+  if (!i) return '<span class="muted small">—</span>';
+  return `<div class="identidad"><b>${esc(i.nombre || '(sin nombre)')}</b><small>${esc(i.celular || '')}${i.celular && i.email ? ' · ' : ''}${esc(i.email || '')}</small></div>`;
+}
+
+function fila(c, semantica, excluido = false) {
   const bloqueado = c.enEstaSesion || c.enOtraSesionDelEstudio;
   const marca = c.enEstaSesion ? '<span class="badge badge-blue">ya en la sesión</span>'
     : c.enOtraSesionDelEstudio ? '<span class="badge badge-gray">en otra sesión del estudio</span>' : '';
   return `<tr class="${esFlojo(c) ? (c.penalizado || !c.verificacionIncompleta ? 'floja' : 'incompleta') : ''}">
     <td><input type="checkbox" data-sel="${c.idPersona}" data-excluido="${excluido ? 1 : 0}" ${bloqueado ? 'disabled' : ''} style="width:16px;height:16px;accent-color:var(--orange)" /></td>
     <td>${codigo(c.codigo)}</td>
-    <td>${segmento(c.segmento)}${c.edad ? `<div class="small muted">${c.edad} años</div>` : ''}</td>
-    <td class="mono">${c.rango ? `#${c.rango} · ${Math.round((c.puntaje || 0) * 100)}` : '—'}${marcas(c) ? `<div class="marcas">${marcas(c)}</div>` : ''}</td>
-    <td style="min-width:240px;max-width:400px">${evidencia(c)}</td>
     <td>${histChip(c.historial, c.idPersona)}</td>
+    ${IDENTIDADES.size ? `<td>${identidad(c.idPersona)}</td>` : ''}
+    <td>${segmento(c.segmento)}</td>
+    ${semantica ? `<td class="mono">${c.rango ? `#${c.rango} · ${Math.round((c.puntaje || 0) * 100)}` : '—'}${marcas(c) ? `<div class="marcas">${marcas(c)}</div>` : ''}</td>
+    <td style="min-width:240px;max-width:400px">${evidencia(c)}</td>` : ''}
+    ${COLUMNAS.map((k) => `<td>${celdaAtributo(c.idPersona, k)}</td>`).join('')}
+    <td><button class="btn btn-ghost btn-xs" data-ficha="${c.idPersona}">Ficha</button></td>
     <td>${excluido ? `<span class="badge badge-amber" title="${esc(c.fatiga.motivos.map((m) => m.mensaje).join(' '))}">fatiga</span><div class="small muted" style="max-width:220px">${esc(c.fatiga.motivos[0]?.mensaje || '')}</div>` : marca}</td>
   </tr>`;
+}
+
+function cabecera(semantica) {
+  return `<tr><th></th><th>Código</th><th>Historial</th>${IDENTIDADES.size ? '<th>Identidad</th>' : ''}<th>Cuota</th>
+    ${semantica ? '<th>Ranking</th><th>Evidencia</th>' : ''}
+    ${COLUMNAS.map((k) => `<th>${esc(DIM[k])}</th>`).join('')}<th></th><th></th></tr>`;
 }
 
 const MOTIVO = { no_cumple: 'no cumplen', dudoso: 'dudosos', sin_evidencia: 'sin evidencia' };
@@ -190,18 +271,65 @@ function avisoExcluidos(r) {
   return `<div class="alert ${r.modoSemantico === 'estricto' ? 'alert-warn' : 'alert-info'}"><span>${r.modoSemantico === 'estricto' ? '⚠️' : 'ℹ️'}</span><span>Modo ${esc(r.modoSemantico)}: el motor dejó afuera a <b>${ex.total}</b> persona(s) — ${detalle.join(' · ')}.${r.modoSemantico === 'estricto' && (ex.porMotivo.dudoso || ex.porMotivo.sin_evidencia) ? ' En modo laxo, los dudosos y sin evidencia entrarían marcados.' : ''}</span></div>`;
 }
 
+function selectorColumnas() {
+  return `<details class="columnas" id="columnas"><summary class="btn btn-outline btn-sm">Columnas ▾${COLUMNAS.length ? ` (${COLUMNAS.length})` : ''}</summary>
+    <div class="columnas-lista"><div class="small muted mb">Código e historial están siempre. Tu elección se recuerda.</div>
+    ${CATALOGO.map((a) => `<label><input type="checkbox" value="${esc(a.clave)}" ${COLUMNAS.includes(a.clave) ? 'checked' : ''} /><span>${esc(a.etiqueta)}</span></label>`).join('')}</div></details>`;
+}
+
+// Las tablas se re-pintan sin volver a buscar (columnas, identidades),
+// conservando los tildados.
+function pintarTablas(r) {
+  const tildados = new Set($$('[data-sel]:checked').map((x) => x.dataset.sel));
+  const sem = !!r.abrioSemantica;
+  const t1 = $('#tabla-candidatos');
+  if (t1) t1.innerHTML = r.candidatos.length ? `<div class="table-wrap"><table><thead>${cabecera(sem)}</thead><tbody>${r.candidatos.map((c) => fila(c, sem)).join('')}</tbody></table></div>` : vacio('Ningún candidato cumple el criterio.', '🔍');
+  const t2 = $('#tabla-excluidos');
+  if (t2) t2.innerHTML = `<div class="table-wrap"><table><thead>${cabecera(sem)}</thead><tbody>${r.excluidosPorFatiga.map((c) => fila(c, sem, true)).join('')}</tbody></table></div>`;
+  $$('[data-sel]').forEach((x) => { if (tildados.has(x.dataset.sel)) x.checked = true; });
+  actualizarIdentificar();
+}
+
+const idsDeLaLista = (r) => [...r.candidatos, ...r.excluidosPorFatiga].map((c) => c.idPersona);
+
+// R1.15 — una sola llamada en lote sobre los ids que la lista ya tiene.
+async function completarValores(r, claves) {
+  const pedida = (pid, k) => VALORES.get(pid)?.[`__${k}`];
+  const ids = idsDeLaLista(r).filter((pid) => claves.some((k) => !pedida(pid, k)));
+  const faltan = claves.filter((k) => ids.some((pid) => !pedida(pid, k)));
+  if (!ids.length || !faltan.length) return;
+  for (let i = 0; i < ids.length; i += 500) {
+    const lote = ids.slice(i, i + 500);
+    const { filas } = await api.atributos.valores(lote, faltan);
+    lote.forEach((pid) => {
+      const v = VALORES.get(pid) || {};
+      faltan.forEach((k) => { v[`__${k}`] = true; });   // pedida: lo que no vino es ausente
+      VALORES.set(pid, v);
+    });
+    filas.forEach((f) => { VALORES.get(f.idPersona)[f.atributo] = f; });
+  }
+}
+
+function actualizarIdentificar() {
+  const b = $('#identificar');
+  if (!b) return;
+  const n = $$('[data-sel]:checked').length;
+  b.textContent = `Identificar (${n})`;
+  b.disabled = n === 0;
+}
+
 function pintar(id, s, r) {
   const cont = $('#resultado');
   const deg = (r.degradaciones || []).map((d) => `<div class="alert alert-warn"><span>⚠️</span><span><b>${esc(d.etapa || 'Degradación')}:</b> ${esc(d.motivo)} ${esc(d.consecuencia || '')}</span></div>`).join('');
   const avisos = (r.avisosCuota || []).map((a) => `<div class="alert alert-error"><span>⛔</span><span>${esc(a.mensaje)}</span></div>`).join('');
-  const cabecera = `<tr><th></th><th>Código</th><th>Segmento</th><th>Ranking</th><th>Evidencia</th><th>Historial</th><th></th></tr>`;
   cont.innerHTML = `${deg}${avisoExcluidos(r)}${avisos}
     <div class="grid-2 ancha">
       <div class="card">
         <div class="card-header"><span class="card-header-title">${esc(resumen(r))}</span>
-          <div class="toolbar"><button class="btn btn-outline btn-sm" id="todos">Seleccionar todos</button>
+          <div class="toolbar">${selectorColumnas()}<button class="btn btn-outline btn-sm" id="todos">Seleccionar todos</button>
+          ${puede('identificar') ? '<button class="btn btn-dark btn-sm" id="identificar" disabled>Identificar (0)</button>' : ''}
           ${puede('seleccionar') ? '<button class="btn btn-orange btn-sm" id="agregar">Agregar a la lista de espera</button>' : ''}</div></div>
-        <div class="card-body tight">${r.candidatos.length ? `<div class="table-wrap"><table><thead>${cabecera}</thead><tbody>${r.candidatos.map((c) => fila(c)).join('')}</tbody></table></div>` : vacio('Ningún candidato cumple el criterio.', '🔍')}
+        <div class="card-body tight"><div id="tabla-candidatos"></div>
           ${r.modoSemantico ? `<div class="pie-lista small muted">${esc(resumen(r))}<br><span class="badge badge-amber">⚠</span> evidencia dudosa, ausente o de confianza baja · <span class="badge badge-blue">verificación incompleta</span> nadie juzgó la evidencia (no es dudoso).</div>` : ''}</div>
       </div>
       <div>
@@ -214,11 +342,72 @@ function pintar(id, s, r) {
       </div>
     </div>
     ${r.excluidosPorFatiga.length ? `<div class="card mt2"><div class="card-header"><span class="card-header-title">Excluidos por el filtro anti-panelista-profesional</span></div>
-      <div class="card-body tight"><div class="table-wrap"><table><thead>${cabecera}</thead><tbody>${r.excluidosPorFatiga.map((c) => fila(c, true)).join('')}</tbody></table></div></div></div>` : ''}`;
+      <div class="card-body tight" id="tabla-excluidos"></div></div>` : ''}`;
 
-  $('#todos').onclick = () => $$('[data-sel][data-excluido="0"]:not(:disabled)').forEach((x) => { x.checked = true; });
+  pintarTablas(r);
+  if (COLUMNAS.length) completarValores(r, COLUMNAS).then(() => pintarTablas(r)).catch(error);
+
+  $('#todos').onclick = () => { $$('[data-sel][data-excluido="0"]:not(:disabled)').forEach((x) => { x.checked = true; }); actualizarIdentificar(); };
+  // Asignados, no sumados: `#resultado` sobrevive entre búsquedas.
+  cont.onchange = (ev) => { if (ev.target.matches('[data-sel]')) actualizarIdentificar(); };
+  cont.onclick = (ev) => {
+    const b = ev.target.closest('[data-ficha]');
+    if (b) verFicha(b.dataset.ficha);
+  };
+  $('#columnas').addEventListener('change', async () => {
+    const elegidas = $$('#columnas input:checked').map((x) => x.value);
+    COLUMNAS = CATALOGO.map((a) => a.clave).filter((k) => elegidas.includes(k));
+    $('#columnas summary').textContent = `Columnas ▾${COLUMNAS.length ? ` (${COLUMNAS.length})` : ''}`;
+    api.preferencias.guardar({ columnasSeleccion: COLUMNAS }).catch(error);
+    pintarTablas(r);
+    try { await completarValores(r, COLUMNAS); pintarTablas(r); } catch (e) { error(e); }
+  });
   const ag = $('#agregar'); if (ag) ag.onclick = () => agregar(id, s);
+  const idf = $('#identificar'); if (idf) idf.onclick = () => identificar(id, r);
   $('#proponer').onclick = () => proponer(id);
+}
+
+// R1.16 — ficha seudónima: lo que la búsqueda ya sabía, de a una persona, más
+// su historial cualitativo. Sin nombre ni contacto, y sin registro.
+async function verFicha(pid) {
+  const { el } = modal({ titulo: 'Ficha del candidato', cuerpo: cargando(), ancho: true });
+  const cuerpo = el.querySelector('.modal-body');
+  try {
+    const f = await api.candidatos.ficha(pid);
+    const h = f.historial || { sesiones: [] };
+    cuerpo.innerHTML = `
+      <p class="mb">${codigo(f.codigo)} · ${esc(f.estado)} · en el panel desde ${fecha(f.enroladoEn)}
+        ${f.paneles.length ? ` · ${f.paneles.map((p) => `<span class="badge badge-gray">${esc(p.etiqueta)}</span>`).join(' ')}` : ''}</p>
+      <h4 class="mb">Atributos</h4>
+      ${f.atributos.length ? `<div class="table-wrap"><table><thead><tr><th>Atributo</th><th>Valor</th><th>Procedencia</th></tr></thead><tbody>
+        ${f.atributos.map((a) => `<tr><td>${esc(a.etiqueta || a.atributo)}</td><td class="td-strong">${esc(a.etiquetaValor ?? a.valor)}</td><td class="small muted">${esc(a.procedencia || '')}</td></tr>`).join('')}</tbody></table></div>`
+        : vacio('No tiene atributos cargados.', '🗒')}
+      <h4 class="mt2 mb">Historial cualitativo · ${h.total || 0}</h4>
+      ${(h.sesiones || []).length ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Estudio</th><th>Categoría</th><th>Tipo</th><th>Modalidad</th></tr></thead><tbody>
+        ${h.sesiones.map((x) => `<tr><td>${fecha(x.fecha)}</td><td class="td-strong">${esc(x.estudioNombre || '—')}${x.importada ? ' <span class="badge badge-gray">importada</span>' : ''}</td><td>${esc(x.categoria)}</td><td>${x.tipo === 'idi' ? 'Entrevista' : 'Grupo'}</td><td>${esc(x.modalidad)}</td></tr>`).join('')}</tbody></table></div>`
+        : '<p class="small muted">Nunca participó de una sesión cualitativa.</p>'}
+      <p class="small muted mt">Ficha seudónima: sin nombre ni contacto, y abrirla no queda registrado como reidentificación.</p>`;
+  } catch (e) { cuerpo.innerHTML = `<div class="alert alert-error"><span>⚠️</span><span>${esc(e.message)}</span></div>`; }
+}
+
+// R1.17 — una acción sobre los tildados, nunca la carga de la página. La
+// bóveda registra una fila de auditoría por persona antes de devolverla.
+async function identificar(id, r) {
+  const ids = $$('[data-sel]:checked').map((x) => x.dataset.sel);
+  if (!ids.length) return;
+  if (ids.length > TOPE_IDENTIFICAR) { toast(`Se pueden identificar hasta ${TOPE_IDENTIFICAR} por vez.`, 'err'); return; }
+  const ok = await confirmar({
+    titulo: `Identificar a ${ids.length} candidato${ids.length > 1 ? 's' : ''}`,
+    texto: 'Vas a ver nombre, celular y email. La bóveda lo registra con tu usuario, una vez por persona, como selección cualitativa de esta sesión. No se guarda en COLOQUIO: desaparece al salir de la pantalla.',
+    boton: 'Identificar',
+  });
+  if (!ok) return;
+  try {
+    const res = await api.candidatos.identificar(id, ids);
+    res.identificados.forEach((i) => IDENTIDADES.set(i.idPersona, { nombre: i.nombre, email: i.email, celular: i.celular }));
+    pintarTablas(r);
+    toast(`${res.identificados.length} identificado${res.identificados.length === 1 ? '' : 's'}${res.noIdentificados ? ` · ${res.noIdentificados} sin consentimiento de contacto vigente` : ''}.`, 'ok');
+  } catch (e) { error(e); }
 }
 
 async function agregar(id, s, anulacion) {
@@ -267,7 +456,7 @@ async function proponer(id) {
       titulo: 'Lista de invitación propuesta', ancho: true,
       cuerpo: `<div class="alert alert-info"><span>ℹ️</span><span>${esc(p.supuesto)} Ya hay ${p.yaInvitados} invitados.</span></div>
         ${(p.avisos || []).map((a) => `<div class="alert alert-warn"><span>⚠️</span><span>${esc(a.mensaje)}</span></div>`).join('')}
-        ${p.deficitRestante.length ? `<div class="alert alert-error"><span>⛔</span><span>La lista de espera no alcanza para: ${p.deficitRestante.map((d) => `${DIM[d.dimension]} ${esc(d.categoria)} (faltan ${d.faltan})`).join(', ')}. Ampliá la selección antes de convocar.</span></div>` : ''}
+        ${p.deficitRestante.length ? `<div class="alert alert-error"><span>⛔</span><span>La lista de espera no alcanza para: ${p.deficitRestante.map((d) => `${esc(DIM[d.dimension])} ${esc(d.categoria)} (faltan ${d.faltan})`).join(', ')}. Ampliá la selección antes de convocar.</span></div>` : ''}
         ${p.propuestos.length ? `<div class="table-wrap"><table><thead><tr><th>Código</th><th>Segmento</th><th>Evidencia</th></tr></thead><tbody>
           ${p.propuestos.map((pid) => `<tr class="${(p.conEvidenciaFloja || []).includes(pid) ? 'floja' : ''}"><td>${codigo(porId[pid]?.codigo)}</td><td>${segmento(porId[pid]?.segmento)}</td><td>${(p.conEvidenciaFloja || []).includes(pid) ? '<span class="badge badge-amber">⚠ evidencia floja</span>' : ''}</td></tr>`).join('')}</tbody></table></div>`
           : vacio('No hay nadie más para invitar desde la lista de espera.', '✅')}

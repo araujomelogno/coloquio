@@ -136,13 +136,28 @@ def ver(ctx, id_persona):
     doc = ctx.store.get(ruta(id_persona))
     if doc is None:
         raise NoEncontrado("Esa persona no tiene historial cualitativo en COLOQUIO.")
+    return _con_nombres(ctx, id_persona, doc)
+
+
+def completo(ctx, id_persona):
+    """R1.16 — el historial entero para la ficha: estudios, categorías, fechas
+    y modalidad. Quien nunca vino tiene un historial vacío, no un error."""
+    return _con_nombres(ctx, id_persona, ctx.store.get(ruta(id_persona)) or vacio())
+
+
+def _con_nombres(ctx, id_persona, doc):
     salida = resumen(doc)
     nombres = {}
     for s in salida["sesiones"]:
         eid = s.get("estudioId")
+        if not eid:
+            # Importada: no tiene estudio; su etiqueta es de ella sola. (Antes
+            # se cacheaba por `estudioId`, que es None para todas, y todas
+            # mostraban la etiqueta de la primera.)
+            s["estudioNombre"] = s.get("etiqueta") or "Sesión histórica importada"
+            continue
         if eid not in nombres:
-            nombres[eid] = ((ctx.store.get(f"estudio/{eid}") or {}).get("nombre")
-                            if eid else s.get("etiqueta") or "Sesión histórica importada")
+            nombres[eid] = (ctx.store.get(f"estudio/{eid}") or {}).get("nombre")
         s["estudioNombre"] = nombres[eid]
     salida["idPersona"] = id_persona
     salida["convocatoriasActivas"] = len(doc.get("convocadoEn") or [])

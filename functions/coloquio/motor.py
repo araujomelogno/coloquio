@@ -26,8 +26,10 @@ import json
 import urllib.error
 import urllib.request
 
-# Tramo etario y sexo se mandan al motor con los nombres de `paneles`.
-_DIMENSION_PANELES = {"sexo": "sexo", "tramoEtario": "tramo_etario", "localidad": "localidad"}
+# R1.14 — los filtros de COLOQUIO usan las claves del catálogo de la bóveda,
+# que son las mismas dimensiones del motor de `paneles`. Solo cambia la forma:
+# `{clave: {en|min|max|desde|hasta}}` → un criterio demográfico por operador.
+_OPERADOR_PANELES = {"en": "in", "min": "gte", "max": "lte", "desde": "gte", "hasta": "lte"}
 
 # R1.18 — el modo de la consulta. `paneles` usa `estricto` por defecto;
 # COLOQUIO usa `laxo`, al revés (addendum R1.18): acá un humano filtra después
@@ -72,12 +74,15 @@ def criterios_para_paneles(filtros, criterios):
     Cada criterio semántico lleva su `duro`: uno duro **filtra** (quien no lo
     cumple queda afuera en los dos modos); uno no duro **ordena**.
     """
+    from .atributos import normalizar_filtros
+
+    filtros = normalizar_filtros(filtros)
     salida = []
-    for dim, dim_paneles in _DIMENSION_PANELES.items():
-        valores = [v for v in ((filtros or {}).get(dim) or []) if v]
-        if valores:
-            salida.append({"tipo": "demografico", "dimension": dim_paneles,
-                           "operador": "in", "valor": valores})
+    for clave in sorted(filtros):
+        for op, valor in sorted((filtros[clave] or {}).items()):
+            if op in _OPERADOR_PANELES and valor not in (None, "", []):
+                salida.append({"tipo": "demografico", "dimension": clave,
+                               "operador": _OPERADOR_PANELES[op], "valor": valor})
     for c in normalizar_criterios(criterios):
         salida.append({"tipo": "semantico", "texto": c["texto"], "duro": c["duro"]})
     return salida

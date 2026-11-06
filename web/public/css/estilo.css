@@ -208,7 +208,7 @@ tr.clickable { cursor: pointer; }
 .est-rechazo, .est-no_contactable, .est-cancelada { background: var(--red-light); color: var(--red); }
 .est-se_cayo, .est-no_show { background: var(--amber-light); color: var(--amber); }
 .est-reemplazado { background: var(--gray-light); color: var(--gray); text-decoration: line-through; }
-.seg-pill { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
+.seg-pill { display: inline-flex; gap: 0.25rem; flex-wrap: nowrap; }
 .seg-pill span { background: var(--gray-xlight); border: 1px solid var(--border); border-radius: 3px; padding: 0.08rem 0.4rem; font-size: 0.68rem; font-weight: 700; color: var(--dark); white-space: nowrap; }
 .codigo { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-weight: 700; letter-spacing: 0.08em; color: var(--dark); background: var(--gray-xlight); border: 1px solid var(--border); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.78rem; }
 
@@ -355,3 +355,38 @@ tr.incompleta td:first-child { box-shadow: inset 4px 0 0 var(--blue); }
   .tab { padding: 0.6rem 0.65rem; font-size: 0.66rem; }
   #toast-wrap { left: 0.75rem; right: 0.75rem; max-width: none; }
 }
+
+/* ── R1.14 · formulario armado desde el catálogo ── */
+.filtros-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 0.6rem; margin-bottom: 0.5rem; }
+.combo { position: relative; border: 1.5px solid var(--border); border-radius: 4px; background: var(--white); }
+.combo[open] { z-index: 20; }
+.combo.activo { border-color: var(--orange); }
+.combo summary { list-style: none; cursor: pointer; padding: 0.5rem 0.7rem; display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.8rem; }
+.combo summary::-webkit-details-marker { display: none; }
+.combo summary::after { content: '▾'; color: var(--gray); }
+.combo-tit { font-weight: 700; color: var(--dark); }
+.combo-sel { color: var(--gray); margin-left: auto; }
+.combo.activo .combo-sel { color: var(--orange); font-weight: 700; }
+.combo-lista { position: absolute; left: -1.5px; right: -1.5px; top: 100%; background: var(--white); border: 1.5px solid var(--border); border-top: none; max-height: 240px; overflow: auto; padding: 0.3rem 0; box-shadow: 0 8px 18px rgba(0,0,0,.08); }
+.combo-lista label, .columnas-lista label { display: flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.7rem; margin: 0; font-size: 0.8rem; text-transform: none; letter-spacing: 0; font-weight: 500; cursor: pointer; }
+.combo-lista label:hover, .columnas-lista label:hover { background: var(--orange-light); }
+.combo-lista input, .columnas-lista input { width: 15px; height: 15px; accent-color: var(--orange); }
+.rango { display: flex; align-items: center; gap: 0.4rem; border: 1.5px solid var(--border); border-radius: 4px; padding: 0.25rem 0.5rem; background: var(--white); font-size: 0.8rem; }
+.rango-tit { font-weight: 700; color: var(--dark); white-space: nowrap; }
+.rango input { flex: 1; min-width: 0; padding: 0.3rem 0.4rem; font-size: 0.8rem; }
+
+/* ── R1.15 · columnas elegibles; ausente ≠ vacío ── */
+.columnas { position: relative; display: inline-block; }
+.columnas summary { list-style: none; }
+.columnas summary::-webkit-details-marker { display: none; }
+.columnas-lista { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; width: 260px; max-height: 340px; overflow: auto; background: var(--white); border: 1.5px solid var(--border); border-radius: 4px; padding: 0.6rem 0.2rem; box-shadow: 0 8px 18px rgba(0,0,0,.1); }
+.columnas-lista .mb { padding: 0 0.7rem; }
+.ausente { color: var(--gray); font-style: italic; font-size: 0.75rem; white-space: nowrap; }
+.vacio-val { color: var(--gray); font-size: 0.75rem; }
+
+/* ── R1.17 · identidad: en memoria, solo en pantalla ── */
+.identidad b { display: block; font-size: 0.8rem; }
+.identidad small { display: block; color: var(--gray); font-size: 0.7rem; }
+
+/* Cuotas: dimensión y categoría salen del catálogo, con etiquetas largas. */
+.form-row-4[data-cuota], .form-row-4.cuota-cab { grid-template-columns: 2fr 2fr 1fr auto; }

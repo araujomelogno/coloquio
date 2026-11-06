@@ -8,13 +8,16 @@ auditoría de PII del store.
 """
 
 import datetime as dt
+import re
+import uuid
 
 import pytest
 
 import fabrica
 from coloquio import cascada, modelo, pii, util, whatsapp
 from coloquio.errores import (
-    Conflicto, ContactoRechazado, FugaDePII, RequiereAnulacion, TransicionInvalida,
+    Conflicto, ContactoRechazado, DatosInvalidos, FugaDePII, NoEncontrado, RequiereAnulacion,
+    SinPermiso, TransicionInvalida,
 )
 
 
@@ -29,7 +32,7 @@ def _conv(api, sid, pid):
 def _llenar_sesion(api, sid, filtros=None):
     """Selección demográfica + incorporación + lista de invitación propuesta."""
     sel = api("POST", f"/cuali/sesiones/{sid}/candidatos",
-              {"modo": "demografica", "filtros": filtros or {"tramoEtario": ["25-34", "35-44"]}})
+              {"modo": "demografica", "filtros": filtros or {"tramo_etario": ["25-34", "35-44"]}})
     ids = [c["idPersona"] for c in sel["candidatos"]]
     api("POST", f"/cuali/sesiones/{sid}/convocatorias", {"candidatos": ids})
     propuesta = api("GET", f"/cuali/sesiones/{sid}/invitacion")
@@ -114,8 +117,8 @@ def test_consentimiento_de_ambito_estudio_no_entra_ni_para_su_estudio(api, ctx, 
     la vista, o las pruebas pasan y producción no."""
     pid = fabrica.id_de(1)
     ctx.bov.personas[pid]["refEstudio"] = sesion["estudio"]["refEstudio"]
-    assert pid not in {b["idPersona"] for b in ctx.bov.convocables()}
-    assert ctx.bov.convocables(ids=[pid]) == []
+    assert pid not in ctx.bov.convocables(limite=5000)
+    assert ctx.bov.vigentes([pid]) == set()
     r = api("POST", f"/cuali/sesiones/{sesion['id']}/candidatos",
             {"modo": "demografica", "filtros": {}, "limite": 500})
     assert pid not in {c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]}
@@ -486,6 +489,9 @@ def test_boveda_solo_superficie_fase5():
     sql = " ".join(re.findall(r'"([^"]*)"', clase)).lower()
     permitidos = {"v_persona_convocable", "contacto_para_convocatoria", "mis_borrados_pendientes",
                   "declarar_convocatoria",
+                  # boveda/0034 — la superficie de selección (R1.14 a R1.17).
+                  "v_atributo_catalogo", "f_persona_convocable_filtrada", "atributos_de_personas",
+                  "ficha_candidato", "identificar_candidatos",
                   "confirmar_borrado", "reportar_error_de_borrado", "sistema_de_la_conexion"}
     for palabra in re.findall(r"\bfrom\s+([a-z_]+)", sql):
         assert palabra in permitidos, palabra
@@ -698,7 +704,7 @@ def _incorporar_con_marcas(api, sid, flojos=None, verificados=None):
     `flojos` en el orden de la lista (para que el desempate viejo los
     prefiriera), o todos menos los últimos `verificados`."""
     sel = api("POST", f"/cuali/sesiones/{sid}/candidatos",
-              {"modo": "demografica", "filtros": {"tramoEtario": ["25-34", "35-44"]}})
+              {"modo": "demografica", "filtros": {"tramo_etario": ["25-34", "35-44"]}})
     ids = [c["idPersona"] for c in sel["candidatos"]]
     corte = flojos if flojos is not None else len(ids) - verificados
     pedidos = [{"idPersona": i, "penalizado": True, "confianzaBaja": True} if n < corte
@@ -746,3 +752,368 @@ def test_r118_reemplazo_ofrece_primero_verificados(api, ctx, sesion):
     marcas = [c["evidenciaFloja"] for c in p["propuestos"]]
     assert marcas == sorted(marcas)  # los verificados, antes
     assert any(c["idPersona"] in flojos and c["marcasEvidencia"] for c in p["propuestos"] + p["parciales"])
+
+
+# ════════════════════════════════════════════════════════════════════
+#  R1.14 a R1.17 · la superficie de selección de la bóveda (`boveda/0034`)
+# ════════════════════════════════════════════════════════════════════
+
+def _buscar(api, sid, filtros, actor=None, **extra):
+    return api("POST", f"/cuali/sesiones/{sid}/candidatos",
+               {"modo": "demografica", "filtros": filtros, "limite": 500, **extra}, actor=actor)
+
+
+def _valores_de(ctx, pid):
+    return {f["atributo"]: f for f in ctx.bov.atributos([pid])}
+
+
+def _ids_que_cumplen(ctx, predicado):
+    """Los convocables (contacto vigente) según los valores de la bóveda."""
+    filas = {}
+    for f in ctx.bov.atributos(list(ctx.bov.personas)):
+        filas.setdefault(f["idPersona"], {})[f["atributo"]] = f
+    vigentes = ctx.bov.vigentes(list(ctx.bov.personas))
+    return {i for i in vigentes if predicado(filas.get(i, {}))}
+
+
+# ── R1.14 · formulario desde el catálogo ──
+
+def test_r114_el_catalogo_sale_de_la_boveda_y_un_atributo_nuevo_aparece(api, ctx, sesion):
+    claves = [a["clave"] for a in api("GET", "/cuali/atributos")["items"]]
+    assert "nse_2019" not in claves                       # dado de baja: no se ofrece
+    nivel = next(a for a in api("GET", "/cuali/atributos")["items"] if a["clave"] == "nivel_educativo")
+    assert "terciaria" not in [c["clave"] for c in nivel["categorias"]]  # categoría de baja
+    # Un atributo creado en `paneles` aparece sin desplegar nada, y se puede filtrar.
+    ctx.bov.catalogo_tabla.append({
+        "clave": "mascota", "etiqueta": "Tiene mascota", "tipo": "categorico", "orden": 45,
+        "categorias": [{"clave": "perro", "etiqueta": "Perro"}, {"clave": "gato", "etiqueta": "Gato"}]})
+    for i, pid in enumerate(list(ctx.bov.personas)[:10]):
+        ctx.bov.personas[pid]["atributos"]["mascota"] = ("perro", "gato")[i % 2]
+    items = api("GET", "/cuali/atributos")["items"]
+    claves = [a["clave"] for a in items]
+    assert claves.index("mascota") == claves.index("localidad") + 1    # en su `orden`
+    r = _buscar(api, sesion["id"], {"mascota": {"en": ["gato"]}})
+    esperados = _ids_que_cumplen(ctx, lambda f: f.get("mascota", {}).get("valor") == "gato")
+    assert esperados and {c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]} == esperados
+
+
+def test_r114_varias_categorias_son_o_y_atributos_distintos_son_y(api, ctx, sesion):
+    # Un categórico con ocho categorías.
+    barrios = [f"barrio_{n}" for n in range(8)]
+    ctx.bov.catalogo_tabla.append({
+        "clave": "barrio", "etiqueta": "Barrio", "tipo": "categorico", "orden": 41,
+        "categorias": [{"clave": b, "etiqueta": b.replace("_", " ")} for b in barrios]})
+    for i, pid in enumerate(ctx.bov.personas):
+        ctx.bov.personas[pid]["atributos"]["barrio"] = barrios[i % 8]
+    vistos = lambda r: {c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]}
+    sid = sesion["id"]
+    uno = vistos(_buscar(api, sid, {"barrio": {"en": ["barrio_1"]}}))
+    otro = vistos(_buscar(api, sid, {"barrio": {"en": ["barrio_6"]}}))
+    los_dos = vistos(_buscar(api, sid, {"barrio": {"en": ["barrio_1", "barrio_6"]}}))
+    assert uno and otro and los_dos == uno | otro                        # o
+    mujeres = vistos(_buscar(api, sid, {"sexo": {"en": ["F"]}}))
+    cruce = vistos(_buscar(api, sid, {"barrio": {"en": ["barrio_1", "barrio_6"]}, "sexo": ["F"]}))
+    assert cruce == los_dos & mujeres and cruce != los_dos               # y
+
+
+def test_r114_cada_tipo_tiene_su_operador(api, ctx, sesion):
+    sid = sesion["id"]
+    vistos = lambda r: {c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]}
+    # numérico → rango
+    r = vistos(_buscar(api, sid, {"hijos": {"min": 1, "max": 1}}))
+    assert r == _ids_que_cumplen(ctx, lambda f: f.get("hijos", {}).get("valorNum") == 1)
+    # fecha → rango
+    r = vistos(_buscar(api, sid, {"ultima_compra": {"desde": "2025-03-01", "hasta": "2025-06-30"}}))
+    assert r and r == _ids_que_cumplen(
+        ctx, lambda f: "2025-03-01" <= (f.get("ultima_compra", {}).get("valorFecha") or "") <= "2025-06-30")
+    # derivado sin categorías (la edad) → rango, sobre el valor efectivo
+    r = vistos(_buscar(api, sid, {"edad": {"min": 35, "max": 44}}))
+    assert r and r == _ids_que_cumplen(ctx, lambda f: 35 <= (f.get("edad", {}).get("valorNum") or 0) <= 44)
+    # derivado con categorías (el tramo) → combo; incluye el tramo cargado sin edad
+    r = vistos(_buscar(api, sid, {"tramo_etario": {"en": ["25-34"]}}))
+    assert r == _ids_que_cumplen(ctx, lambda f: f.get("tramo_etario", {}).get("valor") == "25-34")
+    con_tramo_cargado = {pid for pid, p in ctx.bov.personas.items() if "tramo_etario" in p["atributos"]}
+    assert r & con_tramo_cargado                     # sin edad, cuenta el tramo cargado
+
+
+def test_r114_lo_que_no_se_puede_aplicar_es_error_no_un_filtro_ignorado(api, ctx, sesion):
+    sid = sesion["id"]
+    for filtros, texto in (
+            ({"color_favorito": ["rojo"]}, "no está en el catálogo"),
+            ({"nse_2019": ["alto"]}, "dado de baja"),
+            ({"nivel_educativo": ["terciaria"]}, "no tiene la(s) categoría(s)"),
+            ({"sexo": {"min": 3}}, "admite"),
+            ({"hijos": {"min": "muchos"}}, "no se puede leer")):
+        with pytest.raises(DatosInvalidos, match=re.escape(texto)):
+            _buscar(api, sid, filtros)
+    # En mixta también: la bóveda valida antes de cruzar con el ranking.
+    with pytest.raises(DatosInvalidos, match="no está en el catálogo"):
+        api("POST", f"/cuali/sesiones/{sid}/candidatos",
+            {"modo": "mixta", "filtros": {"color_favorito": ["rojo"]}, "criterios": ["cerveza"]})
+
+
+def test_r114_un_atributo_especial_se_puede_usar_como_cualquiera(api, ctx, sesion):
+    """Decisión de producto (2026-11-06): los atributos `es_especial` están
+    disponibles igual que los demás. El catálogo conserva la marca."""
+    religion = next(a for a in api("GET", "/cuali/atributos")["items"] if a["clave"] == "religion")
+    assert religion["esEspecial"] is True
+    r = _buscar(api, sesion["id"], {"religion": ["ninguna"]})
+    assert {c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]} == _ids_que_cumplen(
+        ctx, lambda f: f.get("religion", {}).get("valor") == "ninguna")
+
+
+def test_r114_mixta_vuelve_a_filtrar_igual_que_la_boveda(api, ctx, sesion):
+    """La mixta re-filtra los ids del ranking con los valores de la bóveda
+    (`atributos.cumple`). Tiene que dar lo mismo que `f_persona_convocable_
+    filtrada()` sobre el panel entero, filtro por filtro."""
+    from coloquio import atributos
+
+    cat = ctx.bov.catalogo()
+    todos = list(ctx.bov.personas)
+    filas = atributos.filas_por_persona(ctx.bov.atributos(todos))
+    vigentes = ctx.bov.vigentes(todos)
+    for filtros in ({"sexo": ["F"]}, {"tramo_etario": ["25-34", "45-54"], "localidad": ["Montevideo"]},
+                    {"edad": {"min": 30, "max": 40}}, {"hijos": {"max": 1}},
+                    {"ultima_compra": {"desde": "2025-05-01"}}, {"nivel_educativo": ["sin_dato"]}):
+            normal = atributos.normalizar_filtros(filtros)
+            local = {i for i in vigentes if atributos.cumple(filas.get(i, {}), normal, cat)}
+            assert local == set(ctx.bov.convocables(normal, limite=5000)), filtros
+    # Y de punta a punta: mixta ⊆ el filtro demográfico.
+    r = api("POST", f"/cuali/sesiones/{sesion['id']}/candidatos",
+            {"modo": "mixta", "filtros": {"localidad": ["Canelones"]}, "criterios": ["cerveza"]})
+    assert r["candidatos"] and {c["idPersona"] for c in r["candidatos"]} <= set(
+        ctx.bov.convocables({"localidad": {"en": ["Canelones"]}}, limite=5000))
+    assert ctx.motor.ultima["criterios"][0] == {
+        "tipo": "demografico", "dimension": "localidad", "operador": "in", "valor": ["Canelones"]}
+
+
+def test_r114_ningun_atributo_se_nombra_en_el_codigo(ctx):
+    """«Si aparece `sexo` escrito a mano en el front, el requisito está
+    incumplido.» Se buscan las claves del catálogo de prueba, entre comillas,
+    en todo el código de COLOQUIO: funciones y front."""
+    import pathlib
+
+    raiz = pathlib.Path(__file__).resolve().parent.parent.parent
+    archivos = list((raiz / "functions" / "coloquio").glob("*.py")) + \
+        list((raiz / "web" / "public" / "js").rglob("*.js"))
+    claves = {a["clave"] for a in fabrica.catalogo()} | {"tramoEtario", "edadMin", "edadMax"}
+    alternativas = "|".join(map(re.escape, sorted(claves)))
+    # Entre comillas (`'sexo'`) o como propiedad (`segmento.sexo`, `{ sexo: … }`).
+    patron = re.compile(r"""['"`](%s)['"`]|\.(%s)\b|[{,]\s*(%s)\s*:""" % ((alternativas,) * 3))
+    hallados = [f"{a.relative_to(raiz)}: {m.group(0)}"
+                for a in archivos for m in patron.finditer(a.read_text(encoding="utf-8"))]
+    assert hallados == []
+
+
+# ── Cuotas por cualquier atributo del catálogo ──
+
+def test_r114_cuotas_por_cualquier_atributo_con_categorias(api, ctx, sesion):
+    eid = sesion["estudio"]["id"]
+    base = {"estudioId": eid, "fecha": "2026-10-09T19:00", "lugar": "Sala", "cupoObjetivo": 6}
+    s = api("POST", "/cuali/sesiones", {**base, "cuotas": [
+        {"dimension": "nivel_educativo", "categoria": "terciario", "objetivo": 3},
+        {"dimension": "nivel_educativo", "categoria": "secundaria", "objetivo": 3}]})
+    r = _buscar(api, s["id"], {"nivel_educativo": ["terciario", "secundaria"]})
+    ids = [c["idPersona"] for c in r["candidatos"]]
+    for c in r["candidatos"]:
+        assert c["segmento"] == {"nivel_educativo": _valores_de(ctx, c["idPersona"])["nivel_educativo"]["valor"]}
+    api("POST", f"/cuali/sesiones/{s['id']}/convocatorias", {"candidatos": ids})
+    estado = api("GET", f"/cuali/sesiones/{s['id']}/embudo")["cuota"]
+    assert {(q["categoria"], q["enEspera"]) for q in estado["cuotas"]} == {
+        ("terciario", sum(1 for c in r["candidatos"] if c["segmento"]["nivel_educativo"] == "terciario")),
+        ("secundaria", sum(1 for c in r["candidatos"] if c["segmento"]["nivel_educativo"] == "secundaria"))}
+    # Un numérico no tiene categorías: no lleva cuota. Una categoría ajena, tampoco.
+    with pytest.raises(DatosInvalidos, match="Dimensión de cuota inválida"):
+        api("POST", "/cuali/sesiones", {**base, "cuotas": [{"dimension": "hijos", "categoria": "1", "objetivo": 2}]})
+    with pytest.raises(DatosInvalidos, match="no es una categoría"):
+        api("POST", "/cuali/sesiones", {**base, "cuotas": [{"dimension": "sexo", "categoria": "Z", "objetivo": 2}]})
+
+
+def test_r114_sumar_una_dimension_de_cuota_completa_el_segmento_de_quien_ya_esta(api, ctx, sesion):
+    sid = sesion["id"]
+    _llenar_sesion(api, sid)
+    antes = _embudo(api, sid)["convocatorias"]
+    assert all("localidad" not in c["segmento"] for c in antes)   # solo las dimensiones con cuota
+    cuotas = [{k: q[k] for k in ("dimension", "categoria", "objetivo")} for q in sesion["cuotas"]]
+    api("PATCH", f"/cuali/sesiones/{sid}", {"cuotas": cuotas + [
+        {"dimension": "localidad", "categoria": "Montevideo", "objetivo": 3}]})
+    despues = _embudo(api, sid)
+    for c in despues["convocatorias"]:
+        assert c["segmento"]["localidad"] == _valores_de(ctx, c["idPersona"])["localidad"]["valor"]
+    mvd = next(q for q in despues["cuota"]["cuotas"] if q["dimension"] == "localidad")
+    assert mvd["enInvitacion"] + mvd["enEspera"] == sum(
+        1 for c in despues["convocatorias"] if c["segmento"]["localidad"] == "Montevideo"
+        and c["estado"] in ("invitado", "candidato"))
+
+
+def test_r114_una_cuota_sobre_un_atributo_dado_de_baja_sigue_legible(api, ctx, sesion):
+    sid = sesion["id"]
+    _llenar_sesion(api, sid)
+    next(a for a in ctx.bov.catalogo_tabla if a["clave"] == "tramo_etario")["activo"] = False
+    e = _embudo(api, sid)                             # no se rompe ni se borra
+    assert {q["dimension"] for q in e["cuota"]["cuotas"]} == {"sexo", "tramo_etario"}
+    api("PATCH", f"/cuali/sesiones/{sid}", {"cupoObjetivo": 9})  # cambiar el cupo sigue andando
+
+
+# ── R1.15 · columnas elegibles ──
+
+def test_r115_agregar_una_columna_no_vuelve_a_correr_la_busqueda(api, ctx, sesion):
+    r = _buscar(api, sesion["id"], {}, limite=200)
+    ids = [c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]][:200]
+    assert len(ids) >= 80
+    antes = dict(ctx.bov.llamadas)
+    v = api("POST", "/cuali/atributos/valores", {"ids": ids, "atributos": ["nivel_educativo", "hijos"]})
+    assert ctx.bov.llamadas["filtrada"] == antes["filtrada"]            # no hubo búsqueda
+    assert ctx.bov.llamadas["atributos"] == antes["atributos"] + 1      # una sola llamada
+    assert {f["atributo"] for f in v["filas"]} == {"nivel_educativo", "hijos"}
+    assert ctx.motor.llamadas == 0
+
+
+def test_r115_ausente_no_es_vacio(api, ctx, sesion):
+    sin_dato_cargado = fabrica.id_de(3)    # i % 4 == 3 → «sin_dato» declarado
+    ausente = fabrica.id_de(4)             # i % 4 == 0 → nunca se cargó
+    filas = api("POST", "/cuali/atributos/valores",
+                {"ids": [sin_dato_cargado, ausente], "atributos": ["nivel_educativo"]})["filas"]
+    assert [(f["idPersona"], f["valor"], f["etiquetaValor"]) for f in filas] == [
+        (sin_dato_cargado, "sin_dato", "Sin dato")]                      # el ausente no viene
+    assert all(f["valor"] is not None for f in ctx.bov.atributos(list(ctx.bov.personas)))
+
+
+def test_r115_las_columnas_se_recuerdan_por_usuario(api, ctx):
+    otra = fabrica.actor(roles=("investigador",), uid="u-inv", email="investigadora@equipos.com.uy")
+    assert api("GET", "/cuali/preferencias")["columnasSeleccion"] == []
+    api("PUT", "/cuali/preferencias", {"columnasSeleccion": ["nivel_educativo", "hijos"]})
+    api("PUT", "/cuali/preferencias", {"columnasSeleccion": ["religion"]}, actor=otra)
+    ctx.reloj.avanzar(days=1)   # «al día siguiente»
+    assert api("GET", "/cuali/preferencias")["columnasSeleccion"] == ["nivel_educativo", "hijos"]
+    assert api("GET", "/cuali/preferencias", actor=otra)["columnasSeleccion"] == ["religion"]
+    with pytest.raises(DatosInvalidos):
+        api("PUT", "/cuali/preferencias", {"columnasSeleccion": ["Ana Pérez <a@b.com>"]})
+
+
+def test_r115_un_atributo_dado_de_baja_desaparece_de_las_columnas_sin_error(api, ctx):
+    api("PUT", "/cuali/preferencias", {"columnasSeleccion": ["nivel_educativo", "hijos"]})
+    next(a for a in ctx.bov.catalogo_tabla if a["clave"] == "hijos")["activo"] = False
+    ids = list(ctx.bov.personas)[:20]
+    filas = api("POST", "/cuali/atributos/valores",
+                {"ids": ids, "atributos": api("GET", "/cuali/preferencias")["columnasSeleccion"]})["filas"]
+    assert filas and {f["atributo"] for f in filas} == {"nivel_educativo"}
+    assert "hijos" not in [a["clave"] for a in api("GET", "/cuali/atributos")["items"]]
+
+
+# ── R1.16 · ficha seudónima ──
+
+def test_r116_ficha_seudonima_con_historial_completo_y_sin_registro(api, ctx, sesion):
+    pid = fabrica.id_de(3)
+    for categoria, fecha in (("bebidas", "2025-11-10T19:00"), ("banca", "2026-02-05T19:00"),
+                             ("alimentos", "2026-06-20T19:00")):
+        api("POST", "/cuali/historico", {"categoria": categoria, "fecha": fecha,
+                                         "etiqueta": f"Grupo de {categoria}", "idPersonas": [pid]})
+    reid, store_antes = len(ctx.bov.reidentificacion), str(ctx.store.todos())
+    f = api("GET", f"/cuali/candidatos/{pid}/ficha")
+    assert len(ctx.bov.reidentificacion) == reid and str(ctx.store.todos()) == store_antes
+    assert pii.hallazgos(f) == []
+    assert not any(v in str(f) for v in (fabrica.nombre_de(3), ctx.bov.personas[pid]["email"],
+                                         ctx.bov.personas[pid]["celular"]))
+    assert f["estado"] == "activa" and f["enroladoEn"].startswith("2024-04-01")
+    assert [p["etiqueta"] for p in f["paneles"]] == ["Panel general"]     # la membresía de baja no
+    por_attr = {a["atributo"]: a for a in f["atributos"]}
+    assert por_attr["edad"]["procedencia"] == "envejecido"              # i % 7 == 3
+    assert por_attr["nivel_educativo"]["etiquetaValor"] == "Sin dato"
+    assert "nse_2019" not in por_attr
+    sesiones_ = f["historial"]["sesiones"]
+    assert len(sesiones_) == 3 and f["historial"]["total"] == 3
+    assert {(s["categoria"], s["fecha"].date().isoformat(), s["estudioNombre"]) for s in sesiones_} == {
+        ("bebidas", "2025-11-10", "Grupo de bebidas"), ("banca", "2026-02-05", "Grupo de banca"),
+        ("alimentos", "2026-06-20", "Grupo de alimentos")}
+    assert all(s["modalidad"] == "presencial" for s in sesiones_)
+
+
+def test_r116_ficha_de_quien_no_esta_en_la_vista(api, ctx):
+    pid = fabrica.id_de(5)
+    ctx.bov.dar_de_baja(pid)
+    with pytest.raises(NoEncontrado):
+        api("GET", f"/cuali/candidatos/{pid}/ficha")
+    # Quien no consintió el contacto pero sigue en la vista (uso semántico)
+    # tiene ficha, como en la bóveda; lo que no tiene es contacto.
+    assert api("GET", f"/cuali/candidatos/{fabrica.id_de(17)}/ficha")["estado"] == "activa"
+
+
+# ── R1.17 · identificar los tildados ──
+
+def test_r117_cargar_resultados_no_reidentifica(api, ctx, sesion):
+    _buscar(api, sesion["id"], {})
+    _buscar(api, sesion["id"], {"sexo": ["F"]})
+    api("POST", f"/cuali/sesiones/{sesion['id']}/candidatos",
+        {"modo": "mixta", "filtros": {"sexo": ["F"]}, "criterios": ["cerveza"]})
+    assert ctx.bov.reidentificacion == [] and ctx.bov.llamadas["identificar"] == 0
+
+
+def test_r117_identificar_veinte_audita_veinte_y_no_deja_nada_en_el_store(api, ctx, sesion, capsys):
+    sid = sesion["id"]
+    r = _buscar(api, sid, {})
+    tildados = [c["idPersona"] for c in r["candidatos"]][:20]
+    antes = str(ctx.store.todos())
+    res = api("POST", f"/cuali/sesiones/{sid}/identificar", {"ids": tildados})
+    assert res["pedidos"] == 20 and len(res["identificados"]) == 20 and res["noIdentificados"] == 0
+    p0 = ctx.bov.personas[res["identificados"][0]["idPersona"]]
+    assert {res["identificados"][0][k] for k in ("nombre", "email", "celular")} == {
+        p0["nombre"], p0["email"], p0["celular"]}
+    filas = [f for f in ctx.bov.reidentificacion if f["via"] == "identificar_candidatos"]
+    assert len(filas) == 20 and {f["idPersona"] for f in filas} == set(tildados)
+    assert all(f["motivo"] == "seleccion_cuali" and f["sistema"] == "coloquio"
+               and f["contexto"]["referencia"] == sid and f["actor"] == "coordinadora@equipos.com.uy"
+               for f in filas)
+    # R1.12: la PII viajó al navegador y murió ahí. Nada en el store —ni un
+    # nombre, ni un contador— y nada en el log.
+    assert str(ctx.store.todos()) == antes
+    volcado = str(ctx.store.todos()) + capsys.readouterr().out
+    for i in res["identificados"]:
+        assert i["nombre"] not in volcado and i["email"] not in volcado and i["celular"] not in volcado
+    # Y después del flujo entero tampoco aparece ningún nombre del panel.
+    test_auditoria_del_store_sin_pii(api, ctx, sesion)
+    assert not any(fabrica.nombre_de(n) in str(ctx.store.todos()) for n in range(96))
+
+
+def test_r117_reaplica_el_gate_y_respeta_los_limites(api, ctx, sesion):
+    sid = sesion["id"]
+    sin = fabrica.id_de(17)                                            # no consintió contacto
+    res = api("POST", f"/cuali/sesiones/{sid}/identificar", {"ids": [fabrica.id_de(1), sin]})
+    assert [i["idPersona"] for i in res["identificados"]] == [fabrica.id_de(1)]
+    assert res["noIdentificados"] == 1
+    assert sin not in {f["idPersona"] for f in ctx.bov.reidentificacion}
+    with pytest.raises(DatosInvalidos, match="tope es 200"):
+        api("POST", f"/cuali/sesiones/{sid}/identificar",
+            {"ids": [str(uuid.uuid4()) for _ in range(201)]})
+    with pytest.raises(DatosInvalidos, match="tope es 200"):    # y la bóveda también lo frena
+        ctx.bov.identificar([str(uuid.uuid4()) for _ in range(201)], sid, "a@equipos.com.uy")
+    with pytest.raises(NoEncontrado):                           # la referencia es una sesión real
+        api("POST", "/cuali/sesiones/no-existe/identificar", {"ids": [fabrica.id_de(1)]})
+    with pytest.raises(DatosInvalidos, match="email del usuario"):
+        ctx.bov.identificar([fabrica.id_de(1)], sid, None)
+
+
+def test_r117_sin_el_permiso_la_lista_sigue_seudonima(api, ctx, sesion):
+    sin_permiso = fabrica.actor(roles=("coordinador", "investigador"), uid="u-sp",
+                                email="sinpermiso@equipos.com.uy")
+    assert "identificar" not in api("GET", "/cuali/yo", actor=sin_permiso)["permisos"]
+    r = _buscar(api, sesion["id"], {"sexo": ["F"]}, actor=sin_permiso)
+    assert r["candidatos"]                                              # la lista anda
+    assert not any(k in c for c in r["candidatos"] for k in ("nombre", "email", "celular"))
+    with pytest.raises(SinPermiso):
+        api("POST", f"/cuali/sesiones/{sesion['id']}/identificar",
+            {"ids": [r["candidatos"][0]["idPersona"]]}, actor=sin_permiso)
+    assert ctx.bov.reidentificacion == []
+    # El rol propio lo habilita, sumado a los otros.
+    con = fabrica.actor(roles=("coordinador", "identificador"), uid="u-id", email="id@equipos.com.uy")
+    assert api("POST", f"/cuali/sesiones/{sesion['id']}/identificar",
+               {"ids": [r["candidatos"][0]["idPersona"]]}, actor=con)["identificados"]
+
+
+def test_r117_identificar_no_es_convocar(api, ctx, sesion):
+    """`contacto_para_convocatoria()` no cambia: sin convocatoria declarada
+    sigue sin entregar el contacto, aunque la persona ya esté identificada."""
+    pid = fabrica.id_de(1)
+    api("POST", f"/cuali/sesiones/{sesion['id']}/identificar", {"ids": [pid]})
+    with pytest.raises(ContactoRechazado, match="no hay motivo"):
+        ctx.bov.contacto(pid, "celular", "coordinadora@equipos.com.uy")

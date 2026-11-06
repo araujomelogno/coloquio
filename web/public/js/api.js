@@ -101,6 +101,23 @@ export const incentivos = {
   entregar: (s, p) => POST(`/incentivos/${s}/${p}/entrega`),
 };
 
+// R1.14 a R1.17 — catálogo de atributos, columnas, ficha e identificación.
+export const atributos = {
+  catalogo: () => GET('/atributos'),
+  valores: (ids, claves) => POST('/atributos/valores', { ids, atributos: claves }),
+};
+
+export const candidatos = {
+  ficha: (id) => GET(`/candidatos/${id}/ficha`),
+  // Devuelve PII: el que llama la muestra y la descarta (R1.12).
+  identificar: (sesionId, ids) => POST(`/sesiones/${sesionId}/identificar`, { ids }),
+};
+
+export const preferencias = {
+  ver: () => GET('/preferencias'),
+  guardar: (b) => PUT('/preferencias', b),
+};
+
 export const personas = {
   historial: (id) => GET(`/personas/${id}/historial`),
   importar: (b) => POST('/historico', b),

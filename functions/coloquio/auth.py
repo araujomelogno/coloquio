@@ -12,7 +12,12 @@ COLOQUIO por construcción: sin eso no habría quién asignar el primer rol.
 
     coordinador   convoca, recibe, liquida incentivos
     investigador  estudios, pautas, selección, historial
+    identificador ve nombre y contacto de los candidatos tildados (R1.17)
     administrador catálogos, umbrales, roles, cumplimiento (y todo lo demás)
+
+`identificar` es un permiso aparte, espejo de `reidentificar` en `paneles`:
+ver quién es alguien antes de convocarlo no viene con ningún otro rol. Por eso
+tiene un rol propio, que se suma a los otros.
 
 En `rolUsuario` no se guarda nombre ni email: el validador de R1.12 no hace
 distinción entre personal y panelistas, y no hace falta.
@@ -20,7 +25,7 @@ distinción entre personal y panelistas, y no hace falta.
 
 from .errores import NoAutenticado, SinPermiso
 
-ROLES = ("coordinador", "investigador", "administrador")
+ROLES = ("coordinador", "investigador", "identificador", "administrador")
 
 PERMISOS = {
     "leer": {"coordinador", "investigador", "administrador"},
@@ -34,6 +39,9 @@ PERMISOS = {
     "convocar": {"coordinador", "administrador"},
     "recibir": {"coordinador", "administrador"},
     "liquidar_incentivos": {"coordinador", "administrador"},
+    # R1.17 — nombre, email y celular de los tildados, antes de convocar. La
+    # bóveda audita cada persona devuelta (motivo `seleccion_cuali`).
+    "identificar": {"identificador", "administrador"},
     "configurar": {"administrador"},
     "gestionar_roles": {"administrador"},
     "cumplimiento": {"administrador"},

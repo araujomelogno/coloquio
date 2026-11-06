@@ -36,7 +36,7 @@
     <li><a href="#s4"><span><span class="num">4</span> Armar una sesión</span></a>
       <ul><li>Fecha y lugar · Cupo y cuotas · Sobre-reclutamiento · Regalo por defecto</li></ul></li>
     <li><a href="#s5"><span><span class="num">5</span> Seleccionar candidatos</span></a>
-      <ul><li>Demográfica, semántica o mixta · La evidencia · El historial · El filtro de fatiga · Anular con motivo · La lista de espera</li></ul></li>
+      <ul><li>Demográfica, semántica o mixta · La evidencia · Columnas · Ficha · Identificar · El historial · El filtro de fatiga · Anular con motivo · La lista de espera</li></ul></li>
     <li><a href="#s6"><span><span class="num">6</span> Convocar: el embudo</span></a>
       <ul><li>Los estados · La lista de invitación · Ver el contacto · Registrar con un clic · Intentos sin respuesta · Reingresar · Cupo alcanzado</li></ul></li>
     <li><a href="#s7"><span><span class="num">7</span> Convocar por WhatsApp</span></a>
@@ -118,7 +118,8 @@
     <tr><th>Rol</th><th>Qué hace</th></tr>
     <tr><td class="destacado">Coordinador de campo</td><td>Arma sesiones, selecciona, convoca, reemplaza, recibe a la gente, cierra la sesión y entrega los regalos.</td></tr>
     <tr><td class="destacado">Investigador</td><td>Crea estudios y pautas, arma sesiones, selecciona candidatos, consulta historiales e importa sesiones históricas.</td></tr>
-    <tr><td class="destacado">Administrador</td><td>Todo lo anterior, y además los catálogos, los umbrales, los roles de los usuarios y las tareas de cumplimiento.</td></tr>
+    <tr><td class="destacado">Identificar candidatos</td><td>Ve el nombre, el celular y el email de los candidatos que tilda en Selección, antes de convocarlos (5.2). Se suma a los otros roles: nadie lo tiene por ser coordinador o investigador.</td></tr>
+    <tr><td class="destacado">Administrador</td><td>Todo lo anterior, incluido identificar candidatos, y además los catálogos, los umbrales, los roles de los usuarios y las tareas de cumplimiento.</td></tr>
   </table>
   <p>Quien es <strong>admin en Gestión de paneles</strong> es administrador de
   COLOQUIO automáticamente. Así siempre hay alguien que pueda asignar los primeros
@@ -246,7 +247,7 @@
     <li>Completá el nombre, el tipo (focus group o entrevista en profundidad), la fecha y la hora, y el lugar. En esta fase todas las sesiones son presenciales.</li>
     <li>Indicá el <strong>cupo objetivo</strong>: cuántas personas querés sentadas.</li>
     <li>Indicá el <strong>ratio de sobre-reclutamiento</strong>. Con cupo 8 y ratio 1,5, el sistema apunta a invitar a 12. Debajo del campo se ve el supuesto: con ratio 1,5 se asume que se cae un 33 %.</li>
-    <li>Cargá las <strong>cuotas de composición</strong>: por cada dimensión (sexo, tramo etario, localidad), cuántas personas de cada categoría querés sentadas. Las cuotas de una dimensión no pueden sumar más que el cupo.</li>
+    <li>Cargá las <strong>cuotas de composición</strong> con <strong>+ Cuota</strong>: elegí la dimensión —cualquier atributo del panel que tenga categorías: sexo, tramo etario, localidad, nivel educativo…—, la categoría y cuántas personas de esa categoría querés sentadas. Las cuotas de una dimensión no pueden sumar más que el cupo.</li>
     <li>Elegí el <strong>regalo por defecto</strong>, el que se compromete cuando alguien llega.</li>
     <li>Tocá <strong>Crear sesión</strong>. El sistema te lleva a Selección.</li>
   </ol>
@@ -273,13 +274,14 @@
 
   <h3><span class="n">5.1</span> Los tres modos</h3>
   <table>
-    <tr><td class="destacado">Demográfica</td><td>Por sexo, tramo etario, localidad y edad. Es la más rápida y no usa el motor semántico.</td></tr>
+    <tr><td class="destacado">Demográfica</td><td>Por cualquier atributo que Gestión de paneles tenga cargado: sexo, tramo etario, localidad, edad, nivel educativo y los que se vayan sumando. Es la más rápida y no usa el motor semántico.</td></tr>
     <tr><td class="destacado">Semántica</td><td>Por <strong>lo que la gente respondió</strong> en encuestas anteriores: «toma cerveza artesanal con amigos». Usa el motor de consulta de Gestión de paneles y ordena a las personas por cuánto se parece lo que dijeron.</td></tr>
     <tr><td class="destacado">Mixta</td><td>Las dos cosas: filtra por segmento y ordena por lo que respondieron.</td></tr>
   </table>
   <ol class="pasos">
     <li>En la pestaña <strong>Selección</strong>, elegí el modo arriba a la derecha.</li>
-    <li>Marcá los filtros demográficos. En semántica o mixta, escribí un criterio; con <strong>+ agregar criterio</strong> sumás otro.</li>
+    <li>Marcá los filtros demográficos. Hay uno por atributo del panel, en el mismo orden que en Gestión de paneles: los que tienen categorías se eligen en una lista (podés marcar varias), y los numéricos y las fechas, con un rango <em>desde / hasta</em>. Varias categorías del mismo atributo se suman —mujeres <em>o</em> no binarias—; atributos distintos se cruzan —mujeres <em>y</em> de 25 a 34—. Si en Gestión de paneles se crea un atributo nuevo, aparece acá al recargar la página.</li>
+    <li>En semántica o mixta, escribí un criterio; con <strong>+ agregar criterio</strong> sumás otro.</li>
     <li>Si un criterio es imprescindible, marcalo <strong>duro</strong>: quien no lo cumple queda afuera. Sin marcar, el criterio <strong>ordena</strong> pero no deja a nadie afuera por sí solo.</li>
     <li>Elegí el <strong>modo</strong>: <strong>laxo</strong> (el que viene marcado) o <strong>estricto</strong>.</li>
     <li>Tocá <strong>Buscar candidatos</strong>.</li>
@@ -320,6 +322,42 @@
   <p>El título de la lista dice siempre con qué modo se buscó —«modo laxo · 53
   candidatos · 12 penalizados»—: un número de candidatos sin el modo al lado no
   se puede interpretar.</p>
+
+  <h4>Más columnas</h4>
+  <p>El código y el historial están siempre. Con <strong>Columnas ▾</strong> sumás
+  los atributos que quieras ver —nivel educativo, edad, cantidad de hijos…—. Se
+  completan al instante, sin volver a buscar, y tu elección se recuerda: mañana
+  vas a ver las mismas columnas.</p>
+  <p>Una celda con <strong>∅ no consta</strong> quiere decir que ese dato nunca se
+  cargó para esa persona. No es lo mismo que «Sin dato», que es una respuesta que
+  la persona dio.</p>
+  <figure><img class="recorte" src="capturas/11a-seleccion-columnas.jpg" />
+    <figcaption><b>Columnas elegidas.</b> Nivel educativo y cantidad de hijos, sumados a la lista sin repetir la búsqueda.</figcaption></figure>
+
+  <h4>La ficha</h4>
+  <p><strong>Ficha</strong> abre todo lo que se sabe de un candidato sin
+  identificarlo: estado, desde cuándo está en el panel, sus atributos con su
+  procedencia (cargado, derivado de la fecha de nacimiento, o una edad declarada
+  que se fue actualizando), los paneles a los que pertenece y su historial
+  cualitativo completo. No muestra nombre ni contacto, y abrirla no queda
+  registrado.</p>
+  <figure><img class="recorte media" src="capturas/11b-ficha.jpg" />
+    <figcaption><b>Ficha del candidato.</b> Seudónima: lo que la búsqueda ya sabía, de a una persona.</figcaption></figure>
+
+  <h4>Identificar a los tildados</h4>
+  <p>Si tenés el rol <strong>Identificar candidatos</strong>, tildá a los que te
+  interesan y tocá <strong>Identificar (N)</strong>. Aparece una columna con el
+  nombre, el celular y el email de cada uno. Hasta 200 por vez.</p>
+  <ul class="puntos">
+    <li>Es una acción tuya, sobre los que tildaste: buscar o abrir la pantalla no
+    identifica a nadie.</li>
+    <li>La bóveda registra cada persona identificada, con tu usuario y la sesión.</li>
+    <li>COLOQUIO no lo guarda: los datos desaparecen al buscar de nuevo o al salir
+    de la pantalla. Si alguien no tiene consentimiento de contacto vigente, no
+    aparece, y el aviso lo cuenta.</li>
+  </ul>
+  <figure><img class="recorte" src="capturas/11c-identificar.jpg" />
+    <figcaption><b>Tres candidatos identificados.</b> Los datos de la captura son ficticios.</figcaption></figure>
 
   <div class="aviso">
     <div class="t">Si el ranking semántico no está disponible</div>
@@ -792,9 +830,10 @@
   </div>
 
   <h4>¿Por qué no veo el nombre de los candidatos?</h4>
-  <p>Porque COLOQUIO no guarda datos personales. Identificás a cada persona por su
-  código y su segmento. El teléfono o el email se piden en el momento de llamar
-  (6.4).</p>
+  <p>Porque la lista es seudónima: cada persona se reconoce por su código, su
+  segmento y su ficha. Para ver nombre y contacto de los que tildaste hace falta el
+  rol <strong>Identificar candidatos</strong> (5.2), y queda registrado. Ya
+  convocada, el teléfono o el email se piden en el momento de llamar (6.4).</p>
 
   <h4>Al pedir un contacto aparece «La bóveda no entregó el contacto». ¿Qué hago?</h4>
   <p>La bóveda rechazó la lectura. Casi siempre es porque la persona retiró su

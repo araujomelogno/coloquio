@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Integración con la bóveda real: `BovedaPostgres` conectado como `coloquio_app`.
 
-Prueba el contrato de la Fase 5 y de R5.2.a contra las migraciones de `paneles`
-(no contra el doble en memoria): gate de la vista, rechazo sin declaración,
-`declarar_convocatoria()` con tope, gate y actualización, contacto auditado con
-el email humano, y el flujo invitar → contacto del dominio.
+Prueba el contrato de la Fase 5, de R5.2.a y de la superficie de selección
+(`boveda/0034`) contra las migraciones de `paneles` (no contra el doble en
+memoria): gate de la vista, rechazo sin declaración, `declarar_convocatoria()`
+con tope, gate y actualización, contacto auditado con el email humano;
+catálogo, convocables filtrados, atributos, ficha seudónima e identificación
+auditada; y el flujo invitar → contacto del dominio.
 
 Contra el cluster de pruebas de `paneles` (arma el escenario con el dueño y lo
 borra al final):
@@ -47,8 +49,32 @@ b = boveda.BovedaPostgres(dsn=COLO)
 ok = lambda m: print("  ✓", m)
 try:
     assert b.sistema() == "coloquio"; ok("sistema_de_la_conexion() = coloquio")
-    assert con in {x["idPersona"] for x in b.convocables(ids=ids)} and sin not in {x["idPersona"] for x in b.convocables(ids=ids)}
+    assert b.vigentes(ids) == {con}
     ok("v_persona_convocable: solo quien consintió")
+
+    # ── boveda/0034 · la superficie de selección ──
+    cat = b.catalogo()
+    assert cat and all({"clave", "tipo", "categorias", "esEspecial"} <= set(a) for a in cat)
+    ok(f"v_atributo_catalogo: {len(cat)} atributos activos")
+    assert con in b.convocables({}, limite=5000) and sin not in b.convocables({}, limite=5000)
+    ok("f_persona_convocable_filtrada: el gate de contacto, sin filtros")
+    try: b.convocables({"clave_que_no_existe": {"en": ["x"]}}); raise SystemExit("debió rechazar")
+    except DatosInvalidos as e: assert "no está en el catálogo" in e.mensaje; ok("filtrada: clave desconocida es error")
+    b.atributos(ids); ok("atributos_de_personas: responde (solo filas que existen)")
+    f = b.ficha(con); assert f["idPersona"] == con and "nombre" not in str(f["atributos"])
+    ok("ficha_candidato: seudónima")
+    with d.cursor() as c:
+        c.execute("select count(*) n from reidentificacion where id_persona = any(%s::uuid[])", (ids,)); antes = c.fetchone()["n"]
+    r = b.identificar(ids, "sesion-integ", "coord@equipos.com.uy")
+    assert [x["idPersona"] for x in r] == [con] and r[0]["email"].endswith("@ej.invalid")
+    with d.cursor() as c:
+        c.execute("select motivo, sistema, actor_uid, contexto->>'referencia' ref from reidentificacion "
+                  "where id_persona = any(%s::uuid[]) order by creado_en desc", (ids,)); filas = c.fetchall()
+    assert len(filas) == antes + 1 and filas[0]["motivo"] == "seleccion_cuali" and filas[0]["sistema"] == "coloquio"
+    assert filas[0]["actor_uid"] == "coord@equipos.com.uy" and filas[0]["ref"] == "sesion-integ"
+    ok("identificar_candidatos: una fila de auditoría por persona devuelta, motivo seleccion_cuali")
+    try: b.identificar([str(uuid.uuid4()) for _ in range(201)], "s", "coord@equipos.com.uy"); raise SystemExit("tope")
+    except DatosInvalidos: ok("identificar: tope de 200")
     try: b.contacto(con, "celular", "coord@equipos.com.uy"); raise SystemExit("debió rechazar")
     except ContactoRechazado as e: assert "convocatoria activa" in e.mensaje; ok("sin declaración: rechazado")
     ahora = dt.datetime.now(dt.timezone.utc)

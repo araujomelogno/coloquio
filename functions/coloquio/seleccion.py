@@ -21,6 +21,11 @@ El cruce entre los dos mundos (SPEC §7.3):
   la fase viene a eliminar.
 * La fatiga **excluye** (R1.3). Los excluidos se devuelven aparte, con el
   motivo, y solo entran al embudo con una anulación registrada.
+* **Filtros del catálogo (R1.14).** El formulario se arma con
+  `v_atributo_catalogo` y la búsqueda demográfica es
+  `f_persona_convocable_filtrada()`: ningún atributo tiene nombre en COLOQUIO.
+  Cada candidato vuelve con su **segmento**: sus valores en las dimensiones
+  con cuota de la sesión, leídos con `atributos_de_personas()`.
 * **Modo laxo o estricto, por consulta (R1.18).** Por defecto, laxo: quien
   tiene evidencia dudosa o ausente entra **marcado** (`penalizado`,
   `confianzaBaja`), en vez de desaparecer. Cada criterio puede ser `duro`
@@ -29,7 +34,7 @@ El cruce entre los dos mundos (SPEC §7.3):
 """
 
 from . import (
-    configuracion, embudo, historial, modelo, sesiones, util,
+    atributos, configuracion, embudo, historial, sesiones, util,
 )
 from .errores import DatosInvalidos, NoEncontrado, RequiereAnulacion
 from .motor import MODO_POR_DEFECTO, MODOS as MODOS_SEMANTICOS, ErrorMotor, normalizar_criterios
@@ -42,28 +47,12 @@ MARCAS_EVIDENCIA = ("penalizado", "verificacionIncompleta", "confianzaBaja")
 LIMITE_MAXIMO = 500
 
 
-def _filtros(cuerpo):
-    crudo = cuerpo.get("filtros") or {}
-    salida = {}
-    for dim in modelo.DIMENSIONES_CUOTA:
-        valores = crudo.get(dim) or []
-        if isinstance(valores, str):
-            valores = [v.strip() for v in valores.split(",")]
-        valores = [str(v).strip() for v in valores if str(v).strip()]
-        if valores:
-            salida[dim] = valores
-    for campo in ("edadMin", "edadMax"):
-        if crudo.get(campo) not in (None, ""):
-            salida[campo] = util.entero(crudo.get(campo), campo, 0, 120)
-    return salida
-
-
 def seleccionar(ctx, actor, sesion_id, cuerpo):
     sesion = sesiones.exigir(ctx.store, sesion_id)
     modo = cuerpo.get("modo") or "demografica"
     if modo not in MODOS:
         raise DatosInvalidos(f"Modo desconocido: {modo!r}.", {"modos": list(MODOS)})
-    filtros = _filtros(cuerpo)
+    filtros = atributos.normalizar_filtros(cuerpo.get("filtros"))
     criterios = normalizar_criterios(cuerpo.get("criterios"))
     modo_semantico = str(cuerpo.get("modoSemantico") or MODO_POR_DEFECTO).strip().lower()
     if modo_semantico not in MODOS_SEMANTICOS:
@@ -126,9 +115,22 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
         base, descartados_gate = [], 0
     elif ranking:
         por_id = {r["idPersona"]: r for r in ranking}
-        base = ctx.boveda.convocables(
-            filtros, ids=list(por_id), limite=LIMITE_MAXIMO)
-        base = [b for b in base if b["idPersona"] in por_id]
+        # El gate lo pone la bóveda: quien no tiene contacto_participacion
+        # vigente no está, aunque el motor lo haya rankeado.
+        vigentes = ctx.boveda.vigentes(list(por_id))
+        ids_rank = [i for i in por_id if i in vigentes]
+        filas = ctx.boveda.atributos(ids_rank) if ids_rank else []
+        if filtros:
+            # Mixta: los ids del ranking pasan otra vez por los filtros, con
+            # los valores de la bóveda. Antes, la bóveda valida los filtros
+            # (una clave o una categoría desconocida es error, no un filtro
+            # que no se aplicó).
+            ctx.boveda.convocables(filtros, limite=1)
+            por_persona = atributos.filas_por_persona(filas)
+            cat = atributos.catalogo(ctx)
+            ids_rank = [i for i in ids_rank if atributos.cumple(por_persona.get(i, {}), filtros, cat)]
+        segs = atributos.segmentos(ctx, ids_rank, sesiones.dimensiones_con_cuota(sesion), filas)
+        base = [{"idPersona": i, "segmento": segs[i]} for i in ids_rank]
         for b in base:
             r = por_id[b["idPersona"]]
             b.update({"puntaje": r.get("puntaje"), "confianza": r.get("confianza"),
@@ -138,7 +140,9 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
         base.sort(key=lambda b: b.get("rango") or 10 ** 9)
         descartados_gate = len(por_id) - len(base)
     else:
-        base = ctx.boveda.convocables(filtros, limite=limite)
+        ids_demo = ctx.boveda.convocables(filtros, limite=limite)
+        segs = atributos.segmentos(ctx, ids_demo, sesiones.dimensiones_con_cuota(sesion))
+        base = [{"idPersona": i, "segmento": segs[i]} for i in ids_demo]
         descartados_gate = 0
 
     # 2 · Historial y fatiga, por lectura puntual (la cláusula `in` está topeada).
@@ -223,14 +227,22 @@ def incorporar(ctx, actor, sesion_id, cuerpo):
     sesion = sesiones.exigir(ctx.store, sesion_id)
     sesiones.exigir_abierta(sesion)
 
-    vigentes = {b["idPersona"]: b for b in ctx.boveda.convocables(
-        ids=list(por_id), limite=LIMITE_MAXIMO)}
+    vigentes = vigentes_con_segmento(ctx, sesion, list(por_id))
     sin_gate = [i for i in por_id if i not in vigentes]
     cfg_fatiga = configuracion.fatiga(ctx.store)
     ahora = ctx.ahora()
     return _incorporar_tx(ctx, actor, sesion_id, por_id, vigentes, sin_gate,
                           motivo_general, cfg_fatiga, ahora,
                           es_reemplazo_de=cuerpo.get("esReemplazoDe"))
+
+
+def vigentes_con_segmento(ctx, sesion, ids):
+    """{id: {segmento}} de los que siguen convocables. El segmento **no** lo
+    manda el cliente: se relee de la bóveda, que además reaplica el gate."""
+    gate = ctx.boveda.vigentes(ids)
+    vigentes = [i for i in ids if i in gate]
+    segs = atributos.segmentos(ctx, vigentes, sesiones.dimensiones_con_cuota(sesion))
+    return {i: {"segmento": segs[i]} for i in vigentes}
 
 
 def _incorporar_tx(ctx, actor, sesion_id, por_id, vigentes, sin_gate, motivo_general,

@@ -12,17 +12,25 @@ hecho así: leerlo antes de revertir algo) y `docs/manual/` (manual de usuario e
   email, celular, dirección ni fecha de nacimiento. Lo hace valer `coloquio/store.py`:
   **toda** escritura pasa por `pii.validar_sin_pii()`. No agregar caminos de escritura
   que no pasen por `Store`. No hay notas libres sobre personas.
-- **La bóveda solo por la superficie de la Fase 5.** `v_persona_convocable` (el gate de
-  consentimiento es la vista, no un `if`), `declarar_convocatoria()`,
-  `contacto_para_convocatoria()` y las tres funciones de la cascada. Nada de `persona`,
-  `consentimiento`, `participacion`. La única escritura es `declarar_convocatoria()`.
+- **La bóveda solo por su superficie.** `v_persona_convocable` (el gate de
+  consentimiento es la bóveda, no un `if`), `declarar_convocatoria()`,
+  `contacto_para_convocatoria()`, las tres funciones de la cascada y la superficie de
+  selección de `boveda/0034`: `v_atributo_catalogo`, `f_persona_convocable_filtrada()`,
+  `atributos_de_personas()`, `ficha_candidato()` e `identificar_candidatos()`. Nada de
+  `persona`, `consentimiento`, `participacion`. La única escritura propia es
+  `declarar_convocatoria()`; la auditoría la escriben la bóveda y sus funciones.
   `test_boveda_solo_superficie_fase5` lo controla.
+- **Ningún atributo tiene nombre en el código (R1.14).** El vocabulario es
+  `v_atributo_catalogo`: filtros, cuotas, columnas y segmento usan sus claves.
+  `test_r114_ningun_atributo_se_nombra_en_el_codigo` lo controla (D52).
 - **Invitar es declarar (R5.2.a).** Todo paso que deja a alguien invitado (lista de
   invitación, fila, reemplazo, WhatsApp, reingreso) y toda reprogramación pasa por
   `coloquio/declaracion.py`, **fuera de la transacción de Firestore y antes**. Sin
   declaración la bóveda no entrega el contacto.
 - **`p_actor` es siempre el email del usuario humano** que pidió el contacto.
 - **El dato de contacto se usa y se descarta**: no se guarda, no se loguea, no va al evento.
+  Lo mismo la identidad de `identificar_candidatos()` (R1.17): es una acción sobre los
+  tildados, con permiso `identificar`, y la ruta no escribe nada en el store (D56).
 - **Nunca se confirma un borrado que no ocurrió** (`cascada.py` verifica antes de confirmar).
 - **Los agregados se mantienen en la misma transacción** que cambia el estado
   (`conteo`, `cuotas[].cubierto`, `valorComprometido`, `participacionCuali`).
