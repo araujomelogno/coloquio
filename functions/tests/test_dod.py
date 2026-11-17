@@ -1117,3 +1117,213 @@ def test_r117_identificar_no_es_convocar(api, ctx, sesion):
     api("POST", f"/cuali/sesiones/{sesion['id']}/identificar", {"ids": [pid]})
     with pytest.raises(ContactoRechazado, match="no hay motivo"):
         ctx.bov.contacto(pid, "celular", "coordinadora@equipos.com.uy")
+
+
+# ════════════════════════════════════════════════════════════════════
+#  R1.19 · la selección es un sorteo con semilla
+# ════════════════════════════════════════════════════════════════════
+
+def _nueva_sesion(api, estudio_id, cuotas=None, cupo=8, nombre="Grupo R1.19"):
+    return api("POST", "/cuali/sesiones", {
+        "estudioId": estudio_id, "nombre": nombre, "tipo": "grupo", "fecha": "2026-10-20T19:00",
+        "lugar": "Sala", "cupoObjetivo": cupo, "ratioSobrerreclutamiento": 1.5,
+        "cuotas": cuotas or []})
+
+
+@pytest.fixture
+def grande():
+    """Un panel de 3000: el segmento es mucho más grande que el límite."""
+    from conftest import Api
+
+    ctx = fabrica.armar_contexto(n=3000)
+    api = Api(ctx, fabrica.actor())
+    e = api("POST", "/cuali/estudios", {"nombre": "Estudio grande", "categoria": "bebidas"})
+    api("POST", f"/cuali/estudios/{e['id']}/pauta", {"topicos": [{"titulo": "T", "minutos": 10}]})
+    return ctx, api, e["id"]
+
+
+def _vistos(r):
+    return [c["idPersona"] for c in r["candidatos"] + r["excluidosPorFatiga"]]
+
+
+def _lista(r):
+    """La lista en el orden en que se muestra (candidatos, después excluidos)."""
+    return _vistos(r)
+
+
+def test_r119_la_misma_sesion_da_la_misma_gente_en_el_mismo_orden(api, ctx, sesion):
+    sid = sesion["id"]
+    assert not ctx.store.get(f"sesion/{sid}").get("semilla")       # sesión de antes: sin semilla
+    a = _buscar(api, sid, {"sexo": ["F"]}, limite=20)
+    semilla = ctx.store.get(f"sesion/{sid}")["semilla"]
+    assert a["sorteo"]["semilla"] == semilla and a["sorteo"]["esDeLaSesion"]
+    b = _buscar(api, sid, {"sexo": ["F"]}, limite=20)                # refrescar, o volver mañana
+    ctx.reloj.avanzar(days=1)
+    c = _buscar(api, sid, {"sexo": ["F"]}, limite=20)
+    assert _lista(a) == _lista(b) == _lista(c)
+    assert ctx.store.get(f"sesion/{sid}")["semilla"] == semilla      # no se regenera
+
+
+def test_r119_sesiones_distintas_reparten_sobre_todo_el_segmento(grande):
+    ctx, api, eid = grande
+    s1, s2 = _nueva_sesion(api, eid), _nueva_sesion(api, eid)
+    a = set(_vistos(_buscar(api, s1["id"], {"sexo": ["F"]}, limite=200)))
+    b = set(_vistos(_buscar(api, s2["id"], {"sexo": ["F"]}, limite=200)))
+    total = len(ctx.bov.convocables({"sexo": {"en": ["F"]}}, limite=5000))
+    assert len(a) == len(b) == 200 and total > 1000
+    # Al azar se esperan ~200·200/total en común (≈ 28); antes eran los 200.
+    assert len(a & b) < 80
+    # Y ya no son «los de uuid más bajo».
+    assert a != set(sorted(ctx.bov.convocables({"sexo": {"en": ["F"]}}, limite=5000))[:200])
+
+
+def test_r119_volver_a_sortear_cambia_la_lista_y_deja_rastro(api, ctx, sesion):
+    sid = sesion["id"]
+    antes = _buscar(api, sid, {}, limite=30)
+    vieja = ctx.store.get(f"sesion/{sid}")["semilla"]
+    r = api("POST", f"/cuali/sesiones/{sid}/sorteo")
+    assert r["semilla"] != vieja and r["anterior"] == vieja and r["resorteos"] == 1
+    despues = _buscar(api, sid, {}, limite=30)
+    assert despues["sorteo"]["semilla"] == r["semilla"] == ctx.store.get(f"sesion/{sid}")["semilla"]
+    assert _lista(despues) != _lista(antes)
+    s = ctx.store.get(f"sesion/{sid}")
+    assert [x["motivo"] for x in s["sorteos"]] == ["inicial", "resorteo"]
+    assert [x["semilla"] for x in s["sorteos"]] == [vieja, r["semilla"]]
+    assert all(x["actorUid"] == "u-coord" for x in s["sorteos"])
+    assert s["metricas"]["resorteos"] == 1
+    assert api("GET", f"/cuali/sesiones/{sid}/factibilidad")["sorteos"] == s["sorteos"]
+
+
+def test_r119_informa_cuantos_cumplen_en_total(grande):
+    ctx, api, eid = grande
+    s = _nueva_sesion(api, eid)
+    r = _buscar(api, s["id"], {"tramo_etario": ["25-34"]}, limite=50)
+    total = len(ctx.bov.convocables({"tramo_etario": {"en": ["25-34"]}}, limite=5000))
+    assert len(_vistos(r)) == 50 and r["sorteo"]["totalElegible"] == total > 50
+    assert r["sorteo"]["hayMas"] is True
+
+
+def test_r119_sin_semilla_la_boveda_se_comporta_como_antes(ctx):
+    todos = ctx.bov.convocables(limite=5000)
+    assert todos == sorted(todos)                                     # por id_persona
+    r = ctx.bov.sorteados({}, limite=10)
+    assert r["ids"] == todos[:10] and r["total"] == len(todos)
+
+
+def test_r119_una_semilla_invalida_se_rechaza(api, ctx, sesion):
+    with pytest.raises(DatosInvalidos, match="semilla"):
+        _buscar(api, sesion["id"], {}, semilla="abc; drop table")
+    with pytest.raises(DatosInvalidos, match="semilla"):
+        ctx.bov.sorteados({}, semilla="x" * 65)
+    with pytest.raises(DatosInvalidos, match="desplazamiento"):
+        ctx.bov.sorteados({}, semilla="abc", desde=-1)
+
+
+def test_r119_el_sorteo_es_representativo(grande):
+    """La proporción por categoría de los sorteados se parece a la del
+    segmento entero: la prueba de que el sesgo se fue. Varias semillas, para
+    que no sea suerte de una."""
+    ctx, _, _ = grande
+    from coloquio import atributos
+
+    todos = ctx.bov.convocables(limite=5000)
+    filas = atributos.filas_por_persona(ctx.bov.atributos(todos))
+
+    def proporciones(ids, dim):
+        n = len(ids)
+        cuenta = {}
+        for i in ids:
+            v = filas[i].get(dim, {}).get("valor")
+            cuenta[v] = cuenta.get(v, 0) + 1
+        return {k: c / n for k, c in cuenta.items()}
+
+    for semilla in ("a1b2c3", "sesion-2026-11", "zz_99"):
+        sorteados = ctx.bov.convocables(limite=500, semilla=semilla)
+        for dim in ("sexo", "tramo_etario", "localidad", "nivel_educativo"):
+            universo, muestra = proporciones(todos, dim), proporciones(sorteados, dim)
+            for categoria, p in universo.items():
+                assert abs(muestra.get(categoria, 0) - p) < 0.06, (semilla, dim, categoria)
+
+
+def test_r119_se_puede_rehacer_una_seleccion_vieja(api, ctx, sesion):
+    sid = sesion["id"]
+    original = _buscar(api, sid, {"sexo": ["M"]}, limite=25)
+    vieja = original["sorteo"]["semilla"]
+    api("POST", f"/cuali/sesiones/{sid}/sorteo")
+    assert _lista(_buscar(api, sid, {"sexo": ["M"]}, limite=25)) != _lista(original)
+    # Con la semilla guardada en `sorteos`, la misma selección, tal cual fue.
+    rehecha = _buscar(api, sid, {"sexo": ["M"]}, limite=25, semilla=vieja)
+    assert _lista(rehecha) == _lista(original)
+    assert rehecha["sorteo"]["esDeLaSesion"] is False
+    assert ctx.store.get(f"sesion/{sid}")["semilla"] != vieja         # mirar no re-sortea
+
+
+# ── R1.19.f · el límite deja de ser global ──
+
+def test_r119_con_cuotas_cada_celda_informa_su_total_y_trae_su_tanda(grande):
+    ctx, api, eid = grande
+    # Una celda rara: 30 de 3000 viven en Salto.
+    for pid in list(ctx.bov.personas)[:30]:
+        ctx.bov.personas[pid]["atributos"]["localidad"] = "Salto"
+    salto = len(ctx.bov.convocables({"localidad": {"en": ["Salto"]}}, limite=5000))
+    s = _nueva_sesion(api, eid, cupo=8, cuotas=[
+        {"dimension": "localidad", "categoria": "Salto", "objetivo": 4},
+        {"dimension": "localidad", "categoria": "Montevideo", "objetivo": 4}])
+    r = _buscar(api, s["id"], {}, limite=100)
+    celdas = {c["categoria"]: c for c in r["sorteo"]["celdas"]}
+    assert celdas["Salto"]["total"] == salto and celdas["Salto"]["devueltos"] == salto
+    assert celdas["Montevideo"]["total"] == len(
+        ctx.bov.convocables({"localidad": {"en": ["Montevideo"]}}, limite=5000))
+    assert celdas["Montevideo"]["devueltos"] == 100
+    # Salto está entera, no los ~1 que caerían en una tanda global de 100.
+    assert sum(1 for c in r["candidatos"] + r["excluidosPorFatiga"]
+               if c["segmento"].get("localidad") == "Salto") == salto
+    assert sum(1 for i in ctx.bov.convocables(limite=100, semilla=r["sorteo"]["semilla"])
+               if ctx.bov.personas[i]["atributos"]["localidad"] == "Salto") < 5
+
+
+def test_r119_una_celda_que_no_alcanza_se_avisa_al_armar(api, ctx, sesion):
+    s = _nueva_sesion(api, sesion["estudio"]["id"], cupo=8, cuotas=[
+        {"dimension": "localidad", "categoria": "Salto", "objetivo": 2},       # nadie vive en Salto
+        {"dimension": "localidad", "categoria": "Montevideo", "objetivo": 4}])
+    f = {c["categoria"]: c for c in api("GET", f"/cuali/sesiones/{s['id']}/factibilidad")["celdas"]}
+    assert f["Salto"]["elegibles"] == 0 and not f["Salto"]["factible"] and f["Salto"]["faltan"] == 3
+    assert "Salto" in f["Salto"]["mensaje"]
+    assert f["Montevideo"]["factible"] and f["Montevideo"]["elegibles"] > f["Montevideo"]["metaInvitacion"]
+    assert ctx.bov.reidentificacion == []                    # contar no identifica a nadie
+
+
+def test_r119_dos_tandas_seguidas_no_repiten_ni_saltean(grande):
+    ctx, api, eid = grande
+    s = _nueva_sesion(api, eid)                                       # sin cuotas: sorteo global
+    t0 = _buscar(api, s["id"], {}, limite=40, pagina=0)
+    t1 = _buscar(api, s["id"], {}, limite=40, pagina=1)
+    juntas = _buscar(api, s["id"], {}, limite=80, pagina=0)
+    ids0 = sorted(_vistos(t0), key=lambda i: _lista(juntas).index(i))
+    ids1 = sorted(_vistos(t1), key=lambda i: _lista(juntas).index(i))
+    assert not set(ids0) & set(ids1)
+    assert set(ids0) | set(ids1) == set(_vistos(juntas))
+    # Y en la bóveda, la paginación es exacta sobre el orden del sorteo.
+    semilla = t0["sorteo"]["semilla"]
+    pag = ctx.bov.convocables(limite=40, semilla=semilla) + ctx.bov.convocables(limite=40, semilla=semilla, desde=40)
+    assert pag == ctx.bov.convocables(limite=80, semilla=semilla)
+
+
+def test_r119_mas_de_5000_por_llamada_se_rechaza(api, ctx, sesion):
+    with pytest.raises(DatosInvalidos, match="5000"):
+        ctx.bov.sorteados({}, limite=5001, semilla="abc")
+    with pytest.raises(DatosInvalidos):
+        _buscar(api, sesion["id"], {}, limite=501)                    # el de pantalla es más chico
+
+
+def test_r119_con_criterio_semantico_manda_el_ranking_y_la_semilla_desempata(api, ctx, sesion):
+    from coloquio import sorteo
+
+    r = _semantica(api, sesion["id"], ["cerveza artesanal amigos"])
+    semilla = r["sorteo"]["semilla"]
+    puntajes = [c["puntaje"] for c in r["candidatos"]]
+    assert puntajes == sorted(puntajes, reverse=True)                 # el ranking manda
+    for p in set(puntajes):
+        empatados = [c["idPersona"] for c in r["candidatos"] if c["puntaje"] == p]
+        assert empatados == sorteo.ordenar(empatados, semilla)
+    assert [c["rango"] for c in r["candidatos"]] == list(range(1, len(r["candidatos"]) + 1))

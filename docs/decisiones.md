@@ -93,6 +93,9 @@ restricción real del sistema. Las pruebas están en `functions/tests/`.
 | [D55](#d55) | Los atributos especiales se usan como cualquier otro | M |
 | [D56](#d56) | Identificar es una acción con rol propio, y no deja nada en el store | M |
 | [D57](#d57) | El doble reproduce el SQL de la `0034` y no nombra atributos | M |
+| [D58](#d58) | La selección es un sorteo con la semilla de la sesión | N · Sorteo R1.19 |
+| [D59](#d59) | Con cuotas, el sorteo es por celda, y la factibilidad se ve al armar | N |
+| [D60](#d60) | Volver a sortear deja rastro | N |
 | [D45](#d45) | Los umbrales de fatiga son un punto de partida, no una definición | K · Abierto |
 
 ---
@@ -1521,6 +1524,132 @@ dos implementaciones. Dos detalles de esa conversión:
 `scripts/integracion_boveda.py` contra el cluster de pruebas de `paneles`.
 
 **Dónde vive.** `coloquio/boveda.py`, `tests/fabrica.py`.
+
+---
+
+# Bloque N · La selección es un sorteo (R1.19)
+
+Antecedente: **D89 de `paneles`** (R-ALE). Una consulta demográfica mostraba
+`order by p.nombre limit 50` y la encuesta tomaba exactamente a esas personas:
+«el nombre está asociado al sexo y a la generación: el sesgo pasaba directo a
+la audiencia». La `0034` reintrodujo el mismo problema con otro orden
+arbitrario: `order by id_persona`.
+
+<a id="d58"></a>
+## D58 · La selección es un sorteo con la semilla de la sesión
+
+**El problema.** `f_persona_convocable_filtrada()` ordenaba por `id_persona` y
+cortaba. El uuid de una persona no cambia nunca, así que la misma búsqueda
+devolvía siempre a la misma gente, y con 3.000 que cumplen y un límite de 500,
+las otras 2.500 no existían para el sistema. La propuesta de invitación hereda
+ese orden (por `ordenListaEspera`), así que proponía siempre a los mismos. Y la
+fatiga, en vez de repartir, administraba una cola fija.
+
+**La decisión.**
+- **El orden es `md5(id_persona || semilla), id_persona`**, la misma cuenta que
+  `demografia.ORDEN_DE_SORTEO` de `paneles`. En Python es `sorteo.clave()` y
+  `sorteo.ordenar()`. No se usa `random()`: misma semilla y mismos datos, misma
+  selección, y la paginación es estable.
+- **La semilla vive en la sesión, no en la ejecución**, y en esto COLOQUIO se
+  aparta de `paneles`:
+  - En `paneles` una consulta se corre y se mira. Acá la lista de candidatos se
+    arma a lo largo de días: el coordinador busca, incorpora algunos y vuelve
+    al otro día. Si cada búsqueda reordenara, perdería el hilo.
+  - La semilla se genera la primera vez que se busca en la sesión, en una
+    transacción (dos búsquedas simultáneas no dejan dos semillas), y la usan
+    todas las búsquedas siguientes.
+  - Queda guardada para siempre. Con ella, o con una de las anteriores
+    (`sesion.sorteos`), se rehace una selección vieja tal cual fue: la
+    búsqueda acepta una `semilla` explícita, que se usa y no se guarda.
+- **La bóveda dice cuántos cumplen en total** (`total`, un `count(*) over ()`).
+  La pantalla muestra «Mostrando N de M elegibles».
+- **Con criterio semántico manda el ranking.** La semilla solo desempata los
+  puntajes iguales; antes los desempataba el id, que es el mismo sesgo.
+- **La propuesta y el reemplazo no cambian** (R1.19.e). Heredan el orden de la
+  lista de espera, que ahora viene del sorteo. Volver a sortear ahí rompería la
+  reproducibilidad.
+
+**Alternativas descartadas.**
+- *`random()`*: la lista se mueve cada vez que se refresca, no se puede
+  paginar ni reproducir. D89 ya lo descartó.
+- *Semilla por ejecución, como en `paneles`*: por lo de arriba.
+- *Rotación por «hace cuánto no se lo invita»*: es mejor, pero ese dato es de
+  COLOQUIO y no de la bóveda, y obliga a cruzar los dos mundos antes del corte.
+  Queda para después, si el sorteo no alcanza.
+
+**Consecuencias.**
+- Las sesiones de antes no tienen semilla. La primera búsqueda les genera una,
+  y su lista cambia esa vez. Es lo correcto: la de antes estaba sesgada. No
+  hace falta script.
+- **Depende de `paneles`**: la versión de `f_persona_convocable_filtrada()`
+  con `p_semilla`, `p_desde` y la columna `total`. COLOQUIO la llama con
+  notación con nombre (`p_semilla => …`), así que no depende del orden de los
+  parámetros. El contrato que asume COLOQUIO, y que reproduce el doble:
+  - semilla inválida (fuera de `[A-Za-z0-9_-]{1,64}`) → `22023`;
+  - `p_desde < 0` → `22023`;
+  - sin semilla, `order by id_persona` (compatibilidad);
+  - el tope de 5.000 por llamada se conserva.
+
+**Dónde vive.** `coloquio/sorteo.py`, `coloquio/seleccion.py`
+(`_sorteo_demografico`), `coloquio/boveda.py` (`sorteados`).
+
+**Cómo se verifica.** `test_r119_*`. La representatividad la prueba
+`test_r119_el_sorteo_es_representativo`: sobre un panel sintético de 3.000 y
+tres semillas, la proporción por categoría de los 500 sorteados queda a menos
+de 6 puntos de la del segmento entero. `scripts/integracion_boveda.py`
+comprueba contra la base que el orden de Postgres es el de `sorteo.ordenar()`.
+
+---
+
+<a id="d59"></a>
+## D59 · Con cuotas, el sorteo es por celda, y la factibilidad se ve al armar
+
+**El problema.** Un tope único sobre un universo que se usa para llenar cuotas
+reparte bien el sesgo, pero no garantiza que cada estrato tenga con qué
+cerrarse. Si 30 de 3.000 viven en Salto, a una tanda global de 100 llegan uno
+o dos.
+
+**La decisión.**
+- **Sin cuotas:** una tanda global del sorteo, paginada.
+- **Con cuotas:** una tanda **por celda de cuota**, con sus filtros acotados a
+  esa categoría y su total elegible. La lista es la unión de las celdas, en el
+  orden del sorteo. Una celda que el filtro ya excluye no se consulta. «Traer
+  más» pide la página siguiente de cada celda.
+- **Factibilidad al armar** (`GET /sesiones/{id}/factibilidad`): por celda,
+  cuántos elegibles hay en el panel contra la meta de invitación. Se ve en la
+  pestaña Armado, antes de convocar a nadie. En la selección, el aviso de cuota
+  usa ese total y no lo que entró en una tanda, que con un límite avisaba de
+  más.
+
+**Consecuencias.**
+- Las cuotas de COLOQUIO son marginales (por dimensión), así que una persona
+  está en varias celdas: la unión se deduplica, y la pantalla también entre
+  tandas.
+- «Elegibles» es antes del filtro de fatiga, que es de COLOQUIO y se aplica a
+  quien sale en la lista. La pantalla lo dice.
+
+**Cómo se verifica.**
+`test_r119_con_cuotas_cada_celda_informa_su_total_y_trae_su_tanda`,
+`test_r119_una_celda_que_no_alcanza_se_avisa_al_armar`,
+`test_r119_dos_tandas_seguidas_no_repiten_ni_saltean`.
+
+---
+
+<a id="d60"></a>
+## D60 · Volver a sortear deja rastro
+
+**El problema.** El addendum lo deja como pregunta abierta (§11). Si alguien
+sortea cinco veces hasta que le gusta la lista, eso es un sesgo de selección
+que nadie ve.
+
+**La decisión.** Cada semilla de una sesión queda en `sesion.sorteos`, con el
+motivo (`inicial` o `resorteo`), quién y cuándo, y `metricas.resorteos` las
+cuenta. La pestaña Armado muestra la lista. Son ids y semillas, no PII.
+
+**Alternativas descartadas.** *No registrar.* Cuesta lo mismo registrar, y
+sin registro la práctica es invisible.
+
+**Cómo se verifica.** `test_r119_volver_a_sortear_cambia_la_lista_y_deja_rastro`.
 
 ---
 

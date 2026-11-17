@@ -297,13 +297,18 @@ def estado_de_cuota(sesion, convocatorias):
     }
 
 
-def avisos_de_disponibilidad(sesion, disponibles, ya_en_sesion):
+def avisos_de_disponibilidad(sesion, disponibles, ya_en_sesion, elegibles=None):
     """R1.6 / caso borde: segmento sin candidatos suficientes.
 
     Se informa al armar, antes de empezar a convocar. `disponibles` son los
     candidatos seleccionables (sin fatiga); `ya_en_sesion` las convocatorias
     existentes (activas).
+
+    R1.19.f — `elegibles` es `{(dimensión, categoría): total}` que informó la
+    bóveda para cada celda. Con él, «hay» es el total del panel y no lo que
+    entró en una tanda: con un límite, contar la tanda avisaba de más.
     """
+    elegibles = elegibles or {}
     ratio = sesion.get("ratioSobrerreclutamiento") or 1
     avisos = []
     for c in sesion.get("cuotas") or []:
@@ -312,6 +317,9 @@ def avisos_de_disponibilidad(sesion, disponibles, ya_en_sesion):
                     if conv.get("estado") in modelo.ACTIVOS | modelo.CUBREN_CUOTA
                     and cumple(conv.get("segmento"), c["dimension"], c["categoria"]))
         hay = sum(1 for d in disponibles if cumple(d.get("segmento"), c["dimension"], c["categoria"]))
+        if (c["dimension"], c["categoria"]) in elegibles:
+            # El total del panel ya incluye a quien está en la sesión.
+            hay = max(0, elegibles[(c["dimension"], c["categoria"])] - tiene)
         if tiene + hay < meta:
             avisos.append({
                 "dimension": c["dimension"], "categoria": c["categoria"],

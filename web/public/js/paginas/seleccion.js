@@ -18,6 +18,11 @@
    pantalla: no se guardan en el navegador, no se mandan a ningún lado y se
    borran al salir de la pantalla o al buscar de nuevo.
 
+   R1.19: la demográfica es un sorteo con la semilla de la sesión: la misma
+   búsqueda da la misma gente, «Traer más» trae la tanda siguiente del mismo
+   orden, y «Volver a sortear» cambia la semilla (y queda registrado). La
+   barra dice cuántos cumplen en total y cuántos hay por celda de cuota.
+
    R1.18: cada criterio semántico puede ser duro (filtra) o no (ordena), y la
    consulta corre en modo laxo (por defecto) o estricto. La lista dice qué
    modo se usó, cuántos dejó afuera el motor y por qué, y marca a simple vista
@@ -159,7 +164,7 @@ function leerConsulta() {
 async function buscar(id, s, q = null) {
   const b = $('#buscar'); b.disabled = true;
   $('#resultado').innerHTML = cargando();
-  q = q || leerConsulta();
+  q = { ...(q || leerConsulta()), pagina: 0 };
   try {
     const r = await api.sesiones.seleccionar(id, q);
     ultima = { sesion: id, r, q };
@@ -168,6 +173,62 @@ async function buscar(id, s, q = null) {
     pintar(id, s, r);
   } catch (e) { $('#resultado').innerHTML = `<div class="alert alert-error"><span>⚠️</span><span>${esc(e.message)}</span></div>`; }
   b.disabled = false;
+}
+
+// R1.19.f — la tanda siguiente del mismo sorteo. Se suma a la lista: el orden
+// no se mueve entre tandas, así que no hay repetidos ni salteados.
+async function traerMas(id, s) {
+  if (!ultima?.r?.sorteo?.hayMas) return;
+  const q = { ...ultima.q, pagina: (ultima.r.sorteo.pagina || 0) + 1 };
+  try {
+    const r = await api.sesiones.seleccionar(id, q);
+    const ya = new Set([...ultima.r.candidatos, ...ultima.r.excluidosPorFatiga].map((c) => c.idPersona));
+    const nuevos = (lista) => lista.filter((c) => !ya.has(c.idPersona));
+    const unido = {
+      ...r,
+      candidatos: [...ultima.r.candidatos, ...nuevos(r.candidatos)],
+      excluidosPorFatiga: [...ultima.r.excluidosPorFatiga, ...nuevos(r.excluidosPorFatiga)],
+    };
+    unido.total = unido.candidatos.length;
+    ultima = { sesion: id, r: unido, q };
+    pintar(id, s, unido);
+  } catch (e) { error(e); }
+}
+
+// R1.19 — volver a sortear: otra semilla, y la lista cambia.
+async function volverASortear(id, s) {
+  const ok = await confirmar({
+    titulo: 'Volver a sortear',
+    texto: 'Sale otra tanda del segmento y la lista va a cambiar. La semilla actual queda registrada en la sesión, junto con quién volvió a sortear y cuándo. Lo que ya está en la lista de espera no cambia.',
+    boton: 'Volver a sortear',
+  });
+  if (!ok) return;
+  try {
+    const r = await api.sesiones.sortear(id);
+    toast(`Nueva semilla ${r.semilla}.`, 'ok');
+    buscar(id, s, ultima?.q);
+  } catch (e) { error(e); }
+}
+
+const miles = (n) => Number(n || 0).toLocaleString('es-UY');
+
+function barraSorteo(r) {
+  const so = r.sorteo;
+  if (!so?.semilla) return '';
+  const vistos = r.candidatos.length + r.excluidosPorFatiga.length;
+  const total = so.totalElegible;
+  const cuantos = r.abrioSemantica && r.modoSemantico
+    ? 'Ordenado por el ranking del motor; la semilla desempata los puntajes iguales.'
+    : (total != null ? `Mostrando <b>${miles(vistos)}</b> de <b>${miles(total)}</b> elegibles.` : '');
+  const celdas = (so.celdas || []).map((c) => `<span class="celda ${c.total != null && c.total < c.metaInvitacion ? 'corta' : ''}" title="Hay que invitar a ${c.metaInvitacion}">${esc(DIM[c.dimension])} ${esc(c.categoria)}: <b>${c.total == null ? '—' : miles(c.total)}</b> elegibles · meta ${c.metaInvitacion}</span>`).join('');
+  return `<div class="sorteo-barra">
+    <span>🎲 Sorteo · semilla <code id="semilla">${esc(so.semilla)}</code>
+      <button class="btn btn-ghost btn-xs" id="copiar-semilla" title="Copiar la semilla">Copiar</button>
+      ${so.esDeLaSesion ? '' : '<span class="badge badge-amber">semilla de una selección anterior</span>'}</span>
+    <span class="small">${cuantos}</span>
+    ${puede('seleccionar') ? '<button class="btn btn-outline btn-xs" id="resortear">Volver a sortear</button>' : ''}
+    ${celdas ? `<div class="celdas">${celdas}</div>` : ''}
+  </div>`;
 }
 
 // R1.18 — `sin_verificar` no es `dudoso`: nadie juzgó la evidencia, que no es
@@ -255,7 +316,8 @@ const MOTIVO = { no_cumple: 'no cumplen', dudoso: 'dudosos', sin_evidencia: 'sin
 // «modo laxo · 187 candidatos · 23 penalizados · 4 sin verificar»: un número
 // de candidatos sin el modo al lado no es interpretable.
 function resumen(r) {
-  if (!r.modoSemantico) return `${r.total} candidatos · ${r.abrioSemantica ? 'demográfica pura (sin ranking semántico)' : 'demográfica pura'}`;
+  const de = r.sorteo?.totalElegible != null && !r.modoSemantico ? ` de ${miles(r.sorteo.totalElegible)} elegibles` : '';
+  if (!r.modoSemantico) return `${r.total} candidatos${de} · ${r.abrioSemantica ? 'demográfica pura (sin ranking semántico)' : 'sorteo de la sesión'}`;
   const partes = [`modo ${r.modoSemantico}`, `${r.total} candidatos`];
   if (r.calidad?.penalizados) partes.push(`${r.calidad.penalizados} penalizados`);
   if (r.calidad?.sinVerificar) partes.push(`${r.calidad.sinVerificar} sin verificar`);
@@ -322,7 +384,7 @@ function pintar(id, s, r) {
   const cont = $('#resultado');
   const deg = (r.degradaciones || []).map((d) => `<div class="alert alert-warn"><span>⚠️</span><span><b>${esc(d.etapa || 'Degradación')}:</b> ${esc(d.motivo)} ${esc(d.consecuencia || '')}</span></div>`).join('');
   const avisos = (r.avisosCuota || []).map((a) => `<div class="alert alert-error"><span>⛔</span><span>${esc(a.mensaje)}</span></div>`).join('');
-  cont.innerHTML = `${deg}${avisoExcluidos(r)}${avisos}
+  cont.innerHTML = `${deg}${avisoExcluidos(r)}${avisos}${barraSorteo(r)}
     <div class="grid-2 ancha">
       <div class="card">
         <div class="card-header"><span class="card-header-title">${esc(resumen(r))}</span>
@@ -330,6 +392,7 @@ function pintar(id, s, r) {
           ${puede('identificar') ? '<button class="btn btn-dark btn-sm" id="identificar" disabled>Identificar (0)</button>' : ''}
           ${puede('seleccionar') ? '<button class="btn btn-orange btn-sm" id="agregar">Agregar a la lista de espera</button>' : ''}</div></div>
         <div class="card-body tight"><div id="tabla-candidatos"></div>
+          ${r.sorteo?.hayMas ? '<div class="pie-lista"><button class="btn btn-outline btn-sm" id="traer-mas">Traer más del sorteo</button> <span class="small muted">la tanda siguiente, en el mismo orden</span></div>' : ''}
           ${r.modoSemantico ? `<div class="pie-lista small muted">${esc(resumen(r))}<br><span class="badge badge-amber">⚠</span> evidencia dudosa, ausente o de confianza baja · <span class="badge badge-blue">verificación incompleta</span> nadie juzgó la evidencia (no es dudoso).</div>` : ''}</div>
       </div>
       <div>
@@ -363,6 +426,10 @@ function pintar(id, s, r) {
     try { await completarValores(r, COLUMNAS); pintarTablas(r); } catch (e) { error(e); }
   });
   const ag = $('#agregar'); if (ag) ag.onclick = () => agregar(id, s);
+  const tm = $('#traer-mas'); if (tm) tm.onclick = () => traerMas(id, s);
+  const rs = $('#resortear'); if (rs) rs.onclick = () => volverASortear(id, s);
+  const cp = $('#copiar-semilla');
+  if (cp) cp.onclick = () => navigator.clipboard?.writeText(r.sorteo.semilla).then(() => toast('Semilla copiada.', 'ok')).catch(() => toast(r.sorteo.semilla));
   const idf = $('#identificar'); if (idf) idf.onclick = () => identificar(id, r);
   $('#proponer').onclick = () => proponer(id);
 }

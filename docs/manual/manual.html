@@ -36,7 +36,7 @@
     <li><a href="#s4"><span><span class="num">4</span> Armar una sesión</span></a>
       <ul><li>Fecha y lugar · Cupo y cuotas · Sobre-reclutamiento · Regalo por defecto</li></ul></li>
     <li><a href="#s5"><span><span class="num">5</span> Seleccionar candidatos</span></a>
-      <ul><li>Demográfica, semántica o mixta · La evidencia · Columnas · Ficha · Identificar · El historial · El filtro de fatiga · Anular con motivo · La lista de espera</li></ul></li>
+      <ul><li>Demográfica, semántica o mixta · La evidencia · Columnas · Ficha · Identificar · El sorteo · El historial · El filtro de fatiga · Anular con motivo · La lista de espera</li></ul></li>
     <li><a href="#s6"><span><span class="num">6</span> Convocar: el embudo</span></a>
       <ul><li>Los estados · La lista de invitación · Ver el contacto · Registrar con un clic · Intentos sin respuesta · Reingresar · Cupo alcanzado</li></ul></li>
     <li><a href="#s7"><span><span class="num">7</span> Convocar por WhatsApp</span></a>
@@ -258,8 +258,13 @@
   mientras la sesión esté abierta. Ahí quedan también las decisiones de cuota que se
   vayan tomando (sección 8) y la opción de <strong>cancelar</strong> la sesión
   (sección 10.4).</p>
+  <p>A la derecha, <strong>Factibilidad de las cuotas</strong> dice, para cada
+  cuota, cuántas personas del panel la cumplen y tienen el consentimiento de
+  contacto vigente, contra cuántas hay que invitar. Si una no alcanza, se ve
+  ahora, al armar, y no a tres horas del grupo. Debajo quedan los
+  <strong>sorteos</strong> de la selección (5.2).</p>
   <figure><img class="recorte" src="capturas/09-sesion-armado.jpg" />
-    <figcaption><b>Armado.</b></figcaption></figure>
+    <figcaption><b>Armado.</b> A la derecha, la factibilidad de cada cuota y los sorteos de la selección.</figcaption></figure>
 </section>
 
 
@@ -367,6 +372,31 @@
     semántica, tu usuario tiene que tener además permiso de consulta en Gestión de
     paneles.</p>
   </div>
+
+  <h4>El sorteo</h4>
+  <p>Una búsqueda demográfica no trae «los primeros» del panel: trae un
+  <strong>sorteo</strong> entre todos los que cumplen el filtro. La primera vez
+  que buscás en una sesión se elige una <strong>semilla</strong>, que queda
+  guardada en la sesión. Con la misma semilla, la misma búsqueda da siempre la
+  misma gente en el mismo orden: si refrescás o volvés mañana, la lista no se
+  mueve.</p>
+  <ul class="puntos">
+    <li>La barra de arriba muestra la semilla (con <strong>Copiar</strong>) y
+    cuántos cumplen en total: «Mostrando 200 de 3.000 elegibles».</li>
+    <li>Si la sesión tiene cuotas, el sorteo se hace <strong>por cuota</strong>.
+    Cada una trae su propia tanda y dice cuántos elegibles tiene; en rojo, la que
+    no llega a su meta de invitación.</li>
+    <li><strong>Traer más del sorteo</strong> suma la tanda siguiente, en el mismo
+    orden, sin repetir a nadie.</li>
+    <li><strong>Volver a sortear</strong> elige otra semilla y la lista cambia. Lo
+    que ya agregaste a la lista de espera no cambia. Cada sorteo queda
+    registrado en la sesión, con quién y cuándo (se ve en Armado), y con la
+    semilla vieja se puede rehacer la selección tal cual fue.</li>
+    <li>Con un criterio semántico manda el ranking: primero los más relevantes.
+    La semilla solo ordena a los que empatan.</li>
+  </ul>
+  <figure><img class="recorte" src="capturas/12a-sorteo.jpg" />
+    <figcaption><b>La barra del sorteo.</b> Semilla, total de elegibles y elegibles por cuota.</figcaption></figure>
 
   <h3><span class="n">5.3</span> El filtro anti-panelista-profesional</h3>
   <p>El sistema <strong>excluye solo</strong> a quien participó de una sesión de la

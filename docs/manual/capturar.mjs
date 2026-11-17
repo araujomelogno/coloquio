@@ -209,9 +209,12 @@ await p.evaluate(() => document.querySelector('#resultado').scrollIntoView());
 await captura(p, 'identificar', { extra: true });
 for (const c of await p.$$('[data-sel]:checked')) await c.uncheck();
 await p.click('#modo label:has(input[value=demografica])');
-await p.click('#buscar'); await p.waitForSelector('text=demográfica pura'); await esperar(p);
+await p.click('#buscar'); await p.waitForSelector('text=sorteo de la sesión'); await esperar(p);
 await p.locator('text=Excluidos por el filtro anti-panelista-profesional').scrollIntoViewIfNeeded();
 await captura(p, 'seleccion-excluidos', { elemento: '.card.mt2' });
+// R1.19 — la barra del sorteo: semilla, total elegible y elegibles por celda.
+await p.locator('.sorteo-barra').scrollIntoViewIfNeeded();
+await captura(p, 'sorteo', { elemento: '.sorteo-barra', extra: true });
 await p.locator('.card.mt2 [data-historial]').first().click(); await p.waitForSelector('.modal-box >> text=Participaciones'); await esperar(p);
 await captura(p, 'historial', { modal: true });
 await cerrarModal(p);

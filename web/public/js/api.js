@@ -74,6 +74,9 @@ export const sesiones = {
   editar: (id, b) => PATCH(`/sesiones/${id}`, b),
   seleccionar: (id, b) => POST(`/sesiones/${id}/candidatos`, b),
   incorporar: (id, b) => POST(`/sesiones/${id}/convocatorias`, b),
+  // R1.19 — otra semilla para la sesión; la factibilidad de sus cuotas.
+  sortear: (id) => POST(`/sesiones/${id}/sorteo`),
+  factibilidad: (id) => GET(`/sesiones/${id}/factibilidad`),
   propuestaInvitacion: (id) => GET(`/sesiones/${id}/invitacion`),
   invitar: (id, b) => POST(`/sesiones/${id}/invitacion`, b),
   embudo: (id) => GET(`/sesiones/${id}/embudo`),

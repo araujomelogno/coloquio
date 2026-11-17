@@ -58,6 +58,19 @@ try:
     ok(f"v_atributo_catalogo: {len(cat)} atributos activos")
     assert con in b.convocables({}, limite=5000) and sin not in b.convocables({}, limite=5000)
     ok("f_persona_convocable_filtrada: el gate de contacto, sin filtros")
+    # ── R1.19 · el sorteo con semilla (requiere la migración de `paneles` con
+    #    p_semilla, p_desde y total en f_persona_convocable_filtrada) ──
+    from coloquio import sorteo
+    r1 = b.sorteados({}, limite=5000, semilla="integ-1")
+    assert con in r1["ids"] and r1["total"] == len(r1["ids"])
+    assert b.sorteados({}, limite=5000, semilla="integ-1") == r1; ok("sorteo: misma semilla, misma selección")
+    assert r1["ids"] == sorteo.ordenar(r1["ids"], "integ-1"); ok("sorteo: el orden de la base es el de sorteo.ordenar()")
+    assert b.convocables(limite=5000) == sorted(b.convocables(limite=5000)); ok("sin semilla: por id_persona, como antes")
+    if r1["total"] >= 2:
+        partes = b.convocables(limite=1, semilla="integ-1") + b.convocables(limite=1, semilla="integ-1", desde=1)
+        assert partes == r1["ids"][:2]; ok("sorteo: dos tandas seguidas, sin repetidos ni salteados")
+    try: b.sorteados({}, semilla="no válida"); raise SystemExit("debió rechazar la semilla")
+    except DatosInvalidos: ok("sorteo: semilla inválida rechazada")
     try: b.convocables({"clave_que_no_existe": {"en": ["x"]}}); raise SystemExit("debió rechazar")
     except DatosInvalidos as e: assert "no está en el catálogo" in e.mensaje; ok("filtrada: clave desconocida es error")
     b.atributos(ids); ok("atributos_de_personas: responde (solo filas que existen)")
