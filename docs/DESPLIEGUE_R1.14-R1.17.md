@@ -23,7 +23,10 @@ de Firestore. Todo lo demás son chequeos.
       deploy en `gestion-paneles`. Se comprueba con `firebase projects:list`.
 - [ ] `gcloud` con *application default credentials* de una cuenta que pueda
       escribir en Firestore (`gcloud auth application-default login`).
-- [ ] Python 3.11.
+- [ ] Python 3.11, con ese nombre: `python3.11 --version` tiene que responder.
+      El deploy arma el entorno de la función con `python3.11`, así que hace
+      falta aunque tengas otro Python. En macOS, si no está:
+      `brew install python@3.11`.
 - [ ] Acceso a la bóveda con `psql` como dueño (`$DSN_BOVEDA`, el mismo de
       [`DESPLIEGUE_coloquio_fase1.md` §1](DESPLIEGUE_coloquio_fase1.md)).
 - [ ] Un usuario de COLOQUIO producción con rol de administrador, para la prueba
@@ -63,17 +66,46 @@ cd coloquio
 git checkout main && git pull
 ```
 
-```bash
-pip install -r functions/requirements.txt pytest
-```
+Las dependencias van en un entorno virtual, `functions/.venv`. En macOS no hay
+un comando `pip` suelto, y el Python de Homebrew no deja instalar paquetes
+fuera de un entorno. La carpeta ya está en `.gitignore`, y el deploy la ignora.
+
+Crear el entorno (una sola vez):
 
 ```bash
-cd functions && python3 -m pytest -q && cd ..
+python3.11 -m venv functions/.venv
+```
+
+Activarlo:
+
+```bash
+source functions/.venv/bin/activate
+```
+
+**Tenés que ver:** el prompt empieza con `(.venv)`.
+
+> **Usá esta misma terminal hasta el final.** El script de migración (pasos 3
+> y 5) necesita estas dependencias. Si abrís otra terminal, volvé a correr el
+> `source` de arriba.
+
+Instalar:
+
+```bash
+python -m pip install -r functions/requirements.txt pytest
+```
+
+Correr las pruebas:
+
+```bash
+cd functions && python -m pytest -q && cd ..
 ```
 
 **Tenés que ver:** `118 passed`.
 
 **Si falla alguna:** no despliegues. Mandá la salida.
+
+> Cada bloque es **un** comando. Copialos de a uno: si se pegan dos en la misma
+> línea, quedan cosas como `pytestcd functions` y la terminal no los entiende.
 
 ---
 
@@ -86,7 +118,7 @@ Las cuotas y los segmentos que ya están guardados usan la clave vieja
 Sin `--aplicar`, el script solo lista lo que cambiaría:
 
 ```bash
-python3 scripts/migrar_claves_r114.py
+python scripts/migrar_claves_r114.py
 ```
 
 **Tenés que ver:** una línea por documento a cambiar, y al final
@@ -116,7 +148,7 @@ firebase deploy --only functions:coloquio,hosting:coloquio
 ## Paso 5 · Migrar, enseguida después del deploy
 
 ```bash
-python3 scripts/migrar_claves_r114.py --aplicar
+python scripts/migrar_claves_r114.py --aplicar
 ```
 
 **Tenés que ver:** `Listo: N documento(s) actualizados.`, con el mismo `N` del
@@ -125,7 +157,7 @@ paso 3 (o uno o dos más, si alguien incorporó gente mientras tanto).
 Volvé a correrlo en seco para confirmar que no quedó nada:
 
 ```bash
-python3 scripts/migrar_claves_r114.py
+python scripts/migrar_claves_r114.py
 ```
 
 **Tenés que ver:** `En seco: 0 documento(s) cambiarían.`
@@ -204,7 +236,7 @@ En este orden:
 2. Devolver las claves viejas, que son las que esa versión entiende:
 
    ```bash
-   python3 scripts/migrar_claves_r114.py --revertir --aplicar
+   python scripts/migrar_claves_r114.py --revertir --aplicar
    ```
 
 3. Volver a `main`:
