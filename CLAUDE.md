@@ -23,6 +23,10 @@ hecho así: leerlo antes de revertir algo) y `docs/manual/` (manual de usuario e
 - **Ningún atributo tiene nombre en el código (R1.14).** El vocabulario es
   `v_atributo_catalogo`: filtros, cuotas, columnas y segmento usan sus claves.
   `test_r114_ningun_atributo_se_nombra_en_el_codigo` lo controla (D52).
+- **La selección es un sorteo con la semilla de la sesión (R1.19).** Orden
+  `md5(id_persona || semilla), id_persona`, nunca `random()` ni el corte por id. La
+  semilla se guarda en la sesión y cada «volver a sortear» queda en `sesion.sorteos`
+  (D58 a D60).
 - **Invitar es declarar (R5.2.a).** Todo paso que deja a alguien invitado (lista de
   invitación, fila, reemplazo, WhatsApp, reingreso) y toda reprogramación pasa por
   `coloquio/declaracion.py`, **fuera de la transacción de Firestore y antes**. Sin
