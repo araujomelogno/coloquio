@@ -8,7 +8,7 @@ import re
 
 from . import (
     atributos, candidatos, canales, cascada, cierre, configuracion, consistencia, embudo, estudios, historial,
-    importacion, incentivos, modelo, recepcion, reemplazo, seleccion, sesiones, tablero,
+    importacion, incentivos, modelo, recepcion, reemplazo, seleccion, sesiones, sorteo, tablero,
     usuarios, util,
 )
 from .errores import NoEncontrado
@@ -153,6 +153,22 @@ def seleccionar(ctx, actor, p, c, q):
 @ruta("POST", "/sesiones/<sesion_id>/convocatorias", "seleccionar")
 def incorporar(ctx, actor, p, c, q):
     return 201, seleccion.incorporar(ctx, actor, p["sesion_id"], c)
+
+
+# ── R1.19 · el sorteo de la sesión ─────────────────────────────────
+
+@ruta("POST", "/sesiones/<sesion_id>/sorteo", "seleccionar")
+def volver_a_sortear(ctx, actor, p, c, q):
+    """Otra semilla para la sesión; la anterior queda en `sesion.sorteos`."""
+    return 200, sorteo.resortear(ctx, actor, p["sesion_id"])
+
+
+@ruta("GET", "/sesiones/<sesion_id>/factibilidad", "leer")
+def ver_factibilidad(ctx, actor, p, c, q):
+    """Por celda de cuota: elegibles en el panel contra la meta de invitación."""
+    sesion = sesiones.exigir(ctx.store, p["sesion_id"])
+    return 200, {"celdas": sorteo.factibilidad(ctx, sesion),
+                 "semilla": sesion.get("semilla"), "sorteos": sesion.get("sorteos") or []}
 
 
 # ── R1.14 a R1.17 · catálogo, columnas, ficha, identificar ──────────

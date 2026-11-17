@@ -26,6 +26,10 @@ El cruce entre los dos mundos (SPEC §7.3):
   `f_persona_convocable_filtrada()`: ningún atributo tiene nombre en COLOQUIO.
   Cada candidato vuelve con su **segmento**: sus valores en las dimensiones
   con cuota de la sesión, leídos con `atributos_de_personas()`.
+* **Un sorteo con semilla (R1.19).** La demográfica ya no corta por
+  `id_persona`: trae una tanda del sorteo de la sesión (`sorteo.py`), pagina
+  sobre él y dice cuántos cumplen en total. Con cuotas, sortea por celda. En
+  semántica o mixta manda el ranking, y la semilla desempata los empates.
 * **Modo laxo o estricto, por consulta (R1.18).** Por defecto, laxo: quien
   tiene evidencia dudosa o ausente entra **marcado** (`penalizado`,
   `confianzaBaja`), en vez de desaparecer. Cada criterio puede ser `duro`
@@ -34,7 +38,7 @@ El cruce entre los dos mundos (SPEC §7.3):
 """
 
 from . import (
-    atributos, configuracion, embudo, historial, sesiones, util,
+    atributos, configuracion, embudo, historial, sesiones, sorteo, util,
 )
 from .errores import DatosInvalidos, NoEncontrado, RequiereAnulacion
 from .motor import MODO_POR_DEFECTO, MODOS as MODOS_SEMANTICOS, ErrorMotor, normalizar_criterios
@@ -59,12 +63,18 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
         raise DatosInvalidos(f"Modo semántico desconocido: {modo_semantico!r}.",
                              {"modosSemanticos": list(MODOS_SEMANTICOS)})
     limite = util.entero(cuerpo.get("limite"), "limite", 1, LIMITE_MAXIMO, por_defecto=200)
+    pagina = util.entero(cuerpo.get("pagina"), "pagina", 0, 10_000, por_defecto=0)
+    # R1.19.c — la semilla es la de la sesión. Una semilla explícita sirve para
+    # rehacer una selección vieja (una de `sesion.sorteos`): se usa y no se guarda.
+    pedida = sorteo.normalizar(cuerpo.get("semilla"))
+    semilla = pedida or sorteo.semilla_de_la_sesion(ctx, actor, sesion_id)
     if modo in ("semantica", "mixta") and not criterios:
         raise DatosInvalidos("Una selección semántica o mixta necesita al menos un criterio en texto.")
     if modo == "mixta" and not filtros:
         raise DatosInvalidos("Una selección mixta necesita algún criterio demográfico.")
 
     degradaciones = []
+    info_sorteo = None
     abrio_semantica = False
     ranking = None
     excluidos_semanticos = None
@@ -137,10 +147,14 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
                       "estado": r.get("estado"),
                       "rango": r.get("rango"), "evidencia": r.get("evidencia") or [],
                       **{m: bool(r.get(m)) for m in MARCAS_EVIDENCIA}})
-        base.sort(key=lambda b: b.get("rango") or 10 ** 9)
+        # R1.19.d — manda el ranking; entre puntajes idénticos, el sorteo (antes
+        # desempataba el id, que es un orden arbitrario y siempre el mismo).
+        base.sort(key=lambda b: (-(b.get("puntaje") or 0), sorteo.clave(b["idPersona"], semilla)))
+        for n, b in enumerate(base, 1):
+            b["rango"] = n
         descartados_gate = len(por_id) - len(base)
     else:
-        ids_demo = ctx.boveda.convocables(filtros, limite=limite)
+        ids_demo, info_sorteo = _sorteo_demografico(ctx, sesion, filtros, limite, pagina, semilla)
         segs = atributos.segmentos(ctx, ids_demo, sesiones.dimensiones_con_cuota(sesion))
         base = [{"idPersona": i, "segmento": segs[i]} for i in ids_demo]
         descartados_gate = 0
@@ -185,9 +199,44 @@ def seleccionar(ctx, actor, sesion_id, cuerpo):
         "descartadosPorGate": descartados_gate,
         "degradaciones": degradaciones,
         "configFatiga": cfg_fatiga,
-        "avisosCuota": sesiones.avisos_de_disponibilidad(sesion, seleccionables, ya_en_sesion),
+        "sorteo": {**(info_sorteo or {"pagina": 0, "hayMas": False}),
+                   "semilla": semilla, "esDeLaSesion": pedida is None or pedida == sesion.get("semilla")},
+        "avisosCuota": sesiones.avisos_de_disponibilidad(
+            sesion, seleccionables, ya_en_sesion,
+            elegibles={(c["dimension"], c["categoria"]): c["total"]
+                       for c in (info_sorteo or {}).get("celdas") or [] if c["total"] is not None}),
         "cuota": sesiones.estado_de_cuota(sesion, ya_en_sesion),
     }
+
+
+def _sorteo_demografico(ctx, sesion, filtros, limite, pagina, semilla):
+    """R1.19.a/f — la tanda `pagina` del sorteo, y cuántos cumplen.
+
+    Sin cuotas, una tanda global. Con cuotas, una tanda **por celda**: cada
+    celda trae su total elegible y sus primeros `limite` del sorteo, y la
+    lista es la unión en el orden del sorteo. Así ninguna celda queda
+    representada solo por los que cayeron en una tanda global.
+    """
+    desde = pagina * limite
+    celdas = sorteo.celdas(sesion)
+    if not celdas:
+        r = ctx.boveda.sorteados(filtros, limite=limite, semilla=semilla, desde=desde)
+        total = r["total"]
+        return r["ids"], {"pagina": pagina, "tanda": limite, "totalElegible": total,
+                          "hayMas": total is not None and desde + limite < total, "celdas": []}
+    ids, info = set(), []
+    for c in celdas:
+        fc = sorteo.filtros_de_celda(filtros, c["dimension"], c["categoria"])
+        r = ({"ids": [], "total": 0} if fc is None else
+             ctx.boveda.sorteados(fc, limite=limite, semilla=semilla, desde=desde))
+        ids.update(r["ids"])
+        info.append({**c, "total": r["total"], "devueltos": len(r["ids"]),
+                     "hayMas": r["total"] is not None and desde + limite < r["total"]})
+    # El total del filtro, para «mostrando N de M»: una fila alcanza para leerlo.
+    total = ctx.boveda.sorteados(filtros, limite=1, semilla=semilla)["total"]
+    return sorteo.ordenar(ids, semilla), {
+        "pagina": pagina, "tanda": limite, "totalElegible": total,
+        "hayMas": any(c["hayMas"] for c in info), "celdas": info}
 
 
 def _calidad(candidatos):

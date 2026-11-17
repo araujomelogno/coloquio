@@ -134,6 +134,27 @@ export async function cabeceraSesion(id, pestana) {
   return { s, html };
 }
 
+// R1.19.f — por celda de cuota, cuántos elegibles hay en el panel contra la
+// meta de invitación. Se ve al armar, no cuando falta gente el día del grupo.
+// Abajo, los sorteos de la selección: cada «volver a sortear» queda registrado.
+async function pintarFactibilidad(id) {
+  const cont = $('#factibilidad');
+  if (!cont) return;
+  try {
+    const f = await api.sesiones.factibilidad(id);
+    const filas = f.celdas.map((c) => `<tr class="${c.factible ? '' : 'floja'}"><td>${esc(DIM[c.dimension])} <b>${esc(c.categoria)}</b></td>
+      <td class="mono">${c.elegibles.toLocaleString('es-UY')}</td><td class="mono">${c.metaInvitacion}</td>
+      <td>${c.factible ? '<span class="badge badge-green">alcanza</span>' : `<span class="badge badge-red">faltan ${c.faltan}</span>`}</td></tr>`).join('');
+    const sorteos = (f.sorteos || []).map((x) => `<li><b>${x.motivo === 'inicial' ? 'Primer sorteo' : 'Volvió a sortear'}</b> · <code>${esc(x.semilla)}</code><div class="meta">${fechaHora(x.ts)}</div></li>`).join('');
+    cont.innerHTML = `${f.celdas.length ? `<div class="table-wrap"><table><thead><tr><th>Celda</th><th>Elegibles</th><th>Meta</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
+      <p class="field-hint mt">Elegibles: con consentimiento de contacto vigente, en todo el panel. Antes del filtro de fatiga.</p>
+      ${f.celdas.some((c) => !c.factible) ? '<div class="alert alert-error mt"><span>⛔</span><span>Alguna celda no alcanza para su meta de invitación: revisá la cuota o el ratio antes de convocar.</span></div>' : ''}`
+      : '<p class="small muted">Sin cuotas: la selección sortea sobre todo el segmento.</p>'}
+      <h4 class="mt2 mb">Sorteos de la selección</h4>
+      ${sorteos ? `<ul class="timeline">${sorteos}</ul>` : '<p class="small muted">Todavía no se buscó: el primer sorteo se hace al abrir la selección.</p>'}`;
+  } catch (e) { cont.innerHTML = `<div class="alert alert-warn"><span>⚠️</span><span>${esc(e.message)}</span></div>`; }
+}
+
 export async function armado(id) {
   const main = $('#main');
   main.innerHTML = cargando();
@@ -147,6 +168,8 @@ export async function armado(id) {
           ${editable ? '<div class="mt2"><button class="btn btn-orange" id="guardar">Guardar cambios</button></div>' : '<p class="field-hint mt">La sesión ya no admite cambios.</p>'}
         </div></div>
       <div>
+        <div class="card"><div class="card-header"><span class="card-header-title">Factibilidad de las cuotas</span></div>
+          <div class="card-body" id="factibilidad">${(s.cuotas || []).length ? cargando() : '<p class="small muted">Sin cuotas: la selección sortea sobre todo el segmento.</p>'}</div></div>
         <div class="card"><div class="card-header"><span class="card-header-title">Decisiones de cuota registradas</span></div>
           <div class="card-body">${(s.decisionesCuota || []).length ? `<ul class="timeline">${s.decisionesCuota.map((d) => `<li><b>${esc(({ bajar_cupo: 'Bajó el cupo', correr_fecha: 'Corrió la fecha', aceptar_incompleta: 'Aceptó cuota incompleta', reemplazo_rompe_cuota: 'Reemplazo que rompe la cuota' })[d.salida] || d.salida)}</b>
             <div class="meta">${fechaHora(d.ts)} · segmento perdido: ${esc(Object.values(d.perdido?.segmento || {}).join(' · '))}</div></li>`).join('')}</ul>` : '<p class="small muted">Ninguna todavía. Cuando un segmento no se pueda restituir, la salida elegida queda acá.</p>'}</div></div>
@@ -159,6 +182,7 @@ export async function armado(id) {
     </div>`;
   const form = $('#form');
   conectarCampos(form);
+  pintarFactibilidad(id);
   if (!editable) $$('input,select,button', form).forEach((x) => { if (x.id !== 'guardar') x.disabled = true; });
   const g = $('#guardar');
   if (g) g.onclick = async () => {

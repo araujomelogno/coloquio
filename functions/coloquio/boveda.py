@@ -37,7 +37,9 @@ lado:
 
 import contextlib
 import datetime as dt
+import hashlib
 import json
+import re
 import threading
 
 from .errores import (
@@ -112,7 +114,7 @@ class Boveda:
     def _catalogo(self):
         raise NotImplementedError
 
-    def _filtrada(self, finalidad, filtros, limite):
+    def _filtrada(self, finalidad, filtros, limite, semilla=None, desde=0):
         raise NotImplementedError
 
     def _vigentes(self, ids):
@@ -145,18 +147,31 @@ class Boveda:
         return salida
 
     # ── R1.14 · quiénes ──
-    def convocables(self, filtros=None, limite=500):
+    def convocables(self, filtros=None, limite=500, semilla=None, desde=0):
         """Ids con `contacto_participacion` vigente que cumplen `filtros`.
 
         `filtros`: `{clave: {en: [...]} | {min, max} | {desde, hasta}}`, la
         forma de `f_persona_convocable_filtrada()`. Categorías del mismo
         atributo: o; atributos distintos: y.
         """
+        return self.sorteados(filtros, limite, semilla, desde)["ids"]
+
+    def sorteados(self, filtros=None, limite=500, semilla=None, desde=0):
+        """R1.19 — `{ids, total}`: una tanda del sorteo y cuántos cumplen en total.
+
+        Con `semilla`, en el orden de `md5(id_persona || semilla), id_persona`;
+        sin ella, por `id_persona` (el comportamiento de antes). `desde`
+        pagina sobre ese orden, que no se mueve entre tandas ni entre días.
+        `total` es el tamaño del conjunto antes del corte; `None` si la tanda
+        vino vacía porque `desde` pasó el final (sin filas no hay `total`).
+        """
         try:
-            filas = self._filtrada(FINALIDAD_CONTACTO, filtros or {}, int(limite))
+            filas = self._filtrada(FINALIDAD_CONTACTO, filtros or {}, int(limite),
+                                   semilla, int(desde or 0))
         except ErrorSQL as error:
             raise _traducir(error, "el filtro") from None
-        return [str(f["id_persona"]) for f in filas]
+        total = int(filas[0]["total"]) if filas else (0 if not desde else None)
+        return {"ids": [str(f["id_persona"]) for f in filas], "total": total}
 
     def vigentes(self, ids):
         """De estos ids, cuáles siguen convocables (el gate, otra vez)."""
@@ -384,11 +399,13 @@ class BovedaPostgres(Boveda):
             "select clave, etiqueta, tipo, orden, es_especial, categorias "
             "from v_atributo_catalogo order by orden, clave")
 
-    def _filtrada(self, finalidad, filtros, limite):
+    def _filtrada(self, finalidad, filtros, limite, semilla=None, desde=0):
+        # Notación con nombre: no depende del orden de los parámetros nuevos.
         return self._superficie(
-            "select id_persona::text as id_persona, finalidades "
-            "from f_persona_convocable_filtrada(%s, %s::jsonb, %s)",
-            (finalidad, json.dumps(filtros), limite))
+            "select id_persona::text as id_persona, finalidades, total "
+            "from f_persona_convocable_filtrada(p_finalidad => %s, p_filtros => %s::jsonb, "
+            "p_limite => %s, p_semilla => %s, p_desde => %s)",
+            (finalidad, json.dumps(filtros), limite, semilla, desde))
 
     def _vigentes(self, ids):
         return self._superficie(
@@ -669,13 +686,21 @@ class BovedaMemoria(Boveda):
     def _arreglo(valores):
         return "{" + ",".join(str(v) for v in valores) + "}"
 
-    def _filtrada(self, finalidad, filtros, limite):
+    def _filtrada(self, finalidad, filtros, limite, semilla=None, desde=0):
         self._caida()
         self.llamadas["filtrada"] += 1
         if finalidad is None or finalidad not in self.FINALIDADES:
             raise ErrorSQL(_INVALIDO, f"Finalidad desconocida: {finalidad}.")
         if limite is None or limite < 1 or limite > TOPE_FILTRADA:
             raise ErrorSQL(_INVALIDO, f"El límite tiene que estar entre 1 y 5000 (vino {limite}).")
+        # R1.19 — la semilla, con el criterio de `consultas.normalizar_semilla()`.
+        if semilla is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", semilla):
+            raise ErrorSQL(_INVALIDO, "La semilla tiene que ser letras, números, «-» o «_» "
+                                      "(hasta 64).")
+        if desde is None or desde < 0:
+            raise ErrorSQL(_INVALIDO, f"El desplazamiento tiene que ser 0 o más (vino {desde}).")
+        # `desde` también es el operador de las fechas, más abajo.
+        desplazamiento = desde
         filtros = {} if filtros is None else filtros
         if not isinstance(filtros, dict):
             raise ErrorSQL(_INVALIDO, "Los filtros van en un objeto {clave: condición}.")
@@ -743,7 +768,14 @@ class BovedaMemoria(Boveda):
                 ids = [i for i in ids if cumple(i)]
             if not ids:
                 break
-        return [{"id_persona": i, "finalidades": vista[i]} for i in sorted(ids)[:limite]]
+        # R1.19 — `order by md5(id_persona::text || semilla), id_persona` con
+        # semilla; por id sin ella. `total` es `count(*) over ()`: antes del corte.
+        if semilla is None:
+            orden = sorted(ids)
+        else:
+            orden = sorted(ids, key=lambda i: (hashlib.md5(f"{i}{semilla}".encode()).hexdigest(), i))
+        return [{"id_persona": i, "finalidades": vista[i], "total": len(orden)}
+                for i in orden[desplazamiento:desplazamiento + limite]]
 
     def _vigentes(self, ids):
         self._caida()
